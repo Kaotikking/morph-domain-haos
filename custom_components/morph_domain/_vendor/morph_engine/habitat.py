@@ -28,18 +28,13 @@ VOID_LOCK = timedelta(hours=24)
 HISTORY_CAPACITY = 128
 TICK_INTERVAL = timedelta(seconds=30)
 CARE_FIELDS = ("food_q8", "water_q8", "play_q8", "rest_q8", "attention_q8")
-FRAME_ALIASES = {
-    "android-morph-habitat:x4": "android-frame:v1:182b7920-d0e7-4e78-a321-1ac6722471da",
-}
+# Deployment-specific frame bindings are configured by each installation.
+FRAME_ALIASES: dict[str, str] = {}
 ELEMENTS = ("FIRE", "WATER", "AIR", "EARTH")
 ENVIRONMENT_SCHEMA = "serein.morph-environment.v1"
 WEATHER_WATER_STATES = {"rainy", "pouring", "lightning-rainy", "snowy-rainy"}
 ENVIRONMENT_ENTITIES = {
-    "weather": "weather.kigm",
     "sun": "sun.sun",
-    "temperature": "sensor.kigm_temperature",
-    "humidity": "sensor.kigm_relative_humidity",
-    "wind": "sensor.kigm_wind_speed",
 }
 
 
@@ -120,11 +115,11 @@ def read_environment(hass: Any, now: datetime) -> dict[str, Any]:
     )
     return {
         "observed_at": _iso(now),
-        "weather": rows["weather"].state if rows["weather"] else None,
-        "sun": rows["sun"].state if rows["sun"] else None,
-        "temperature_f": _number(rows["temperature"].state if rows["temperature"] else None),
-        "humidity_percent": _number(rows["humidity"].state if rows["humidity"] else None),
-        "wind_mph": _number(rows["wind"].state if rows["wind"] else None),
+        "weather": rows["weather"].state if rows.get("weather") else None,
+        "sun": rows["sun"].state if rows.get("sun") else None,
+        "temperature_f": _number(rows["temperature"].state if rows.get("temperature") else None),
+        "humidity_percent": _number(rows["humidity"].state if rows.get("humidity") else None),
+        "wind_mph": _number(rows["wind"].state if rows.get("wind") else None),
         "active_motion_entities": motion,
         "sources": {name: entity_id for name, entity_id in ENVIRONMENT_ENTITIES.items()},
     }
