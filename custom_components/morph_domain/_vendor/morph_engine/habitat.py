@@ -196,7 +196,7 @@ def habitat_status(ledger: MorphTransferLedger, morph_id: str, now: datetime) ->
     if not morph:
         raise TransferError("NOT_FOUND", "Morph is not known to HAOS")
     habitat = _habitat(morph, now)
-    alias = next((name for name, frame in FRAME_ALIASES.items() if frame == morph["source_frame"]), None)
+    alias = next((name for name, frame in FRAME_ALIASES.items() if frame == morph["source_frame"]), morph["source_frame"])
     result = {
         "schema": HABITAT_SCHEMA,
         "morph_id": morph["morph_id"],
@@ -217,13 +217,12 @@ def habitat_status(ledger: MorphTransferLedger, morph_id: str, now: datetime) ->
         "presentation": deepcopy(habitat["presentation"]),
         "life": deepcopy(morph["snapshot"]["payload"]),
     }
-    if alias is not None:
-        result["presentation_binding"] = bind_presentation(
-            presentation=habitat["presentation"], source_frame=morph["source_frame"],
-            habitat_alias=alias, generation=morph["generation"],
-            snapshot_digest=morph["snapshot_digest"], place=habitat["place"],
-            authority=morph["authority"],
-        )
+    result["presentation_binding"] = bind_presentation(
+        presentation=habitat["presentation"], source_frame=morph["source_frame"],
+        habitat_alias=alias, generation=morph["generation"],
+        snapshot_digest=morph["snapshot_digest"], place=habitat["place"],
+        authority=morph["authority"],
+    )
     return result
 
 
@@ -357,7 +356,7 @@ def call_morph(ledger: MorphTransferLedger, request: dict[str, Any], now: dateti
     morph = ledger.data["morphs"].get(str(request["morph_id"]))
     if not morph:
         raise TransferError("NOT_FOUND", "only a Morph already transferred into HAOS may be called")
-    if FRAME_ALIASES.get(target_frame) != morph["source_frame"]:
+    if FRAME_ALIASES.get(target_frame, target_frame) != morph["source_frame"]:
         raise TransferError("WRONG_FRAME_ALIAS", "habitat alias is not bound to the retained source frame")
     _require_haos(morph)
     habitat = _habitat(morph, now)
