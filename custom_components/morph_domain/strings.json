@@ -1,0 +1,15 @@
+{
+  "title": "MorphDomain",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Install MorphDomain",
+        "description": "Create a local five-place habitat for Serein Morphs. Installation does not claim ownership of any Morph."
+      }
+    },
+    "abort": {
+      "already_configured": "MorphDomain is already installed.",
+      "legacy_engine_active": "Disable Serein Gateway before installing MorphDomain so only one life engine can run."
+    }
+  }
+}
