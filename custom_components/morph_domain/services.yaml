@@ -1,0 +1,31 @@
+morph_place:
+  name: Move Morph
+  description: Move a HAOS-owned Morph between the five canonical places.
+  fields:
+    morph_id:
+      name: Morph ID
+      required: true
+      selector:
+        text:
+    place:
+      name: Place
+      required: true
+      selector:
+        select:
+          options: [VOID, NURSERY, SEREIN_GARDENS, HORIZON, CODE_HAVEN]
+
+morph_care:
+  name: Care for Morph
+  description: Apply one idempotent care interaction to a HAOS-owned Morph.
+  fields:
+    morph_id:
+      name: Morph ID
+      required: true
+      selector:
+        text:
+    action:
+      name: Care action
+      required: true
+      selector:
+        select:
+          options: [FEED, WATER, PLAY, REST]
