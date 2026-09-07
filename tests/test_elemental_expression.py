@@ -1,37 +1,56 @@
 from copy import deepcopy
+import sys
+from pathlib import Path
+import unittest
+
+SDK_PATH = Path(__file__).resolve().parents[1] / "custom_components" / "morph_domain" / "_vendor" / "morph_sdk"
+sys.path.insert(0, str(SDK_PATH))
+
 import elemental_expression as e
 
 
 def sample(generation=0):
     parents = [] if generation == 0 else ["parent:a", "parent:b"]
-    return parents, {"schema": e.EXPRESSION_SCHEMA, "dominant_primitive": "AIR",
-        "secondary_primitive": None, "recessive_potentials": ["ELECTRICITY"],
+    return parents, {
+        "schema": e.EXPRESSION_SCHEMA,
+        "dominant_primitive": "AIR",
+        "secondary_primitive": None,
+        "recessive_potentials": ["ELECTRICITY"],
         "parent_locus_contributions": {} if generation == 0 else {p: 5 for p in parents},
-        "expression_level": 2, "compound_family": None, "visual_expression": "wind-trail",
-        "environment_selector": "weather.sunny", "body_mode": "floating",
+        "expression_level": 2,
+        "compound_family": None,
+        "visual_expression": "wind-trail",
+        "environment_selector": "weather.sunny",
+        "body_mode": "floating",
         "body_mode_lock": {"locked_mode": None, "replacement_mode": None, "reason": None},
-        "origin_binding_digest": "a" * 64}
+        "origin_binding_digest": "a" * 64,
+    }
 
 
-def test_generation_zero_and_descendant_50_50():
-    p, v = sample(); assert e.validate_expression(v, generation=0, parent_ids=p) == v
-    p, v = sample(1); assert e.validate_expression(v, generation=1, parent_ids=p) == v
+class ElementalExpressionTests(unittest.TestCase):
+    def test_generation_zero_and_descendant_50_50(self):
+        parents, value = sample()
+        self.assertEqual(e.validate_expression(value, generation=0, parent_ids=parents), value)
+        parents, value = sample(1)
+        self.assertEqual(e.validate_expression(value, generation=1, parent_ids=parents), value)
+
+    def test_air_water_storm_only_at_compound_tier(self):
+        self.assertIsNone(e.resolve_compound(["AIR", "WATER"], 3))
+        self.assertEqual(e.resolve_compound(["AIR", "WATER"], 4), "STORM")
+
+    def test_unknown_pairing_fails_closed(self):
+        with self.assertRaises(e.ElementalExpressionError) as raised:
+            e.resolve_compound(["FIRE", "EARTH"], 4)
+        self.assertEqual(raised.exception.code, "UNADMITTED_COMPOUND")
+
+    def test_lineage_and_expression_cannot_regress(self):
+        parents, old = sample()
+        new = deepcopy(old)
+        new["expression_level"] = 1
+        with self.assertRaises(e.ElementalExpressionError) as raised:
+            e.verify_expression_successor(old, new, generation=0, parent_ids=parents)
+        self.assertEqual(raised.exception.code, "EXPRESSION_REGRESSION")
 
 
-def test_air_water_storm_only_at_compound_tier():
-    assert e.resolve_compound(["AIR", "WATER"], 3) is None
-    assert e.resolve_compound(["AIR", "WATER"], 4) == "STORM"
-
-
-def test_unknown_pairing_fails_closed():
-    try: e.resolve_compound(["FIRE", "EARTH"], 4)
-    except e.ElementalExpressionError as ex: assert ex.code == "UNADMITTED_COMPOUND"
-    else: raise AssertionError("unadmitted compound accepted")
-
-
-def test_lineage_and_expression_cannot_regress():
-    p, old = sample(); new = deepcopy(old); new["expression_level"] = 1
-    try: e.verify_expression_successor(old, new, generation=0, parent_ids=p)
-    except e.ElementalExpressionError as ex: assert ex.code == "EXPRESSION_REGRESSION"
-    else: raise AssertionError("regression accepted")
-
+if __name__ == "__main__":
+    unittest.main()
