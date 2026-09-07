@@ -45,15 +45,19 @@ once published as a public repository and released.
 - `POST /api/morph-domain/v1/habitat/{action}`
 
 Both require Home Assistant authentication. HTTP success alone never establishes
-ownership; transfer remains prepare, accept, commit, and reconciliation.
+ownership. The normative return order, expiry semantics, and separate custody,
+durability, and render gates are defined in
+[`docs/TRANSFER-PROTOCOL-V1.md`](docs/TRANSFER-PROTOCOL-V1.md).
 
-## Portable contract fixtures
+## Transfer proof status
 
-Language-neutral Android/HAOS fixtures live under `fixtures/v1`. Their byte
-digests are frozen in `fixtures/v1/manifest.json`; protocol object digests use
-canonical UTF-8 JSON with sorted keys and compact separators. Regenerate them
-only with `python tools/generate_contract_fixtures.py`, then run the complete
-test suite before release. Presentation bindings remain outside life snapshots.
+The versioned transfer implementation is present, but the language-neutral
+Android/HAOS fixture bundle and executable transfer regression suite are not yet
+published in this repository. Do not treat this tree as the canonical Android
+contract proof source until the required proof set in
+[`docs/TRANSFER-PROTOCOL-V1.md`](docs/TRANSFER-PROTOCOL-V1.md) is present and
+passes against the exact released tree. The current public test covers elemental
+expression only. Presentation bindings remain outside life snapshots.
 
 ## Safe migration
 
