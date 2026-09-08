@@ -139,7 +139,7 @@ class MorphTransferManager:
 
     async def tick_habitats(self) -> None:
         """Persist one bounded interval for every HAOS-owned active Morph."""
-        from .morph_habitat import advance_morph, read_environment
+        from .morph_habitat import advance_morph, read_environment, run_automatic_reflexes
 
         async with self.lock:
             now = datetime.now(UTC)
@@ -148,9 +148,21 @@ class MorphTransferManager:
             environment = read_environment(self.hass, now)
             for morph in candidate.data["morphs"].values():
                 changed = advance_morph(morph, now, environment) or changed
+            reflex_changed, notices = run_automatic_reflexes(candidate, now)
+            changed = reflex_changed or changed
             if changed:
                 await self.store.async_save(candidate.data)
                 self.ledger = candidate
+            for notice in notices:
+                if notice["kind"] == "GRADUATED":
+                    title, message = "Morph graduated", f"{notice['morph_id']} moved from Nursery to Horizon."
+                else:
+                    title, message = "Morph needs Code Haven review", f"{notice['morph_id']} is isolated in Code Haven for Operator review."
+                await self.hass.services.async_call(
+                    "persistent_notification", "create",
+                    {"notification_id": notice["id"], "title": title, "message": message},
+                    blocking=False,
+                )
 
 
 async def async_setup_morph_transfer(hass: HomeAssistant) -> None:
@@ -174,4 +186,5 @@ async def async_setup_morph_transfer(hass: HomeAssistant) -> None:
     manager.store = store
     hass.data[DATA_KEY] = manager
     hass.http.register_view(MorphTransferView)
+
 

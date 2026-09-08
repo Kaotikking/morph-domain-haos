@@ -29,6 +29,10 @@ CARE_ACTIONS = {"FEED", "WATER", "PLAY", "REST"}
 VOID_LOCK = timedelta(hours=24)
 HISTORY_CAPACITY = 128
 TICK_INTERVAL = timedelta(seconds=30)
+NURSERY_GRADUATION = timedelta(hours=72)
+AUTOMATIC_CARE_INTERVAL = timedelta(hours=8)
+AUTOMATIC_CARE_THRESHOLD = 96
+REFLEX_SCHEMA = "serein.morph-reflex.v1"
 CARE_FIELDS = ("food_q8", "water_q8", "play_q8", "rest_q8", "attention_q8")
 # Deployment-specific frame bindings are configured by each installation.
 FRAME_ALIASES: dict[str, str] = {}
@@ -99,6 +103,12 @@ def _habitat(morph: dict[str, Any], now: datetime) -> dict[str, Any]:
                 "last_sample": None,
             },
             "founder_axes": {},
+            "reflex": {
+                "schema": REFLEX_SCHEMA,
+                "last_care_window": None,
+                "graduated_at": None,
+                "notice_ids": [],
+            },
         }
         morph["habitat"] = habitat
     habitat.setdefault("environment", {
@@ -110,6 +120,12 @@ def _habitat(morph: dict[str, Any], now: datetime) -> dict[str, Any]:
     })
     habitat.setdefault("presentation", neutral_presentation(morph["morph_id"]))
     habitat.setdefault("founder_axes", {})
+    habitat.setdefault("reflex", {
+        "schema": REFLEX_SCHEMA,
+        "last_care_window": None,
+        "graduated_at": None,
+        "notice_ids": [],
+    })
     return habitat
 
 
@@ -297,6 +313,70 @@ def advance_morph(morph: dict[str, Any], now: datetime, environment: dict[str, A
     return True
 
 
+def run_automatic_reflexes(
+    ledger: MorphTransferLedger, now: datetime
+) -> tuple[bool, list[dict[str, Any]]]:
+    """Apply only proven, deterministic MorphDomain maintenance reflexes."""
+    changed = False
+    notices: list[dict[str, Any]] = []
+    for morph_id in sorted(ledger.data["morphs"]):
+        morph = ledger.data["morphs"][morph_id]
+        if morph.get("authority") != "HAOS":
+            continue
+        habitat = _habitat(morph, now)
+        reflex = habitat["reflex"]
+
+        if (habitat["place"] == "NURSERY"
+                and int(habitat["nursery_elapsed_seconds"]) >= int(NURSERY_GRADUATION.total_seconds())):
+            event_id = f"auto-graduate:{morph_id}:{habitat['entered_at']}"
+            if event_id not in habitat["event_ids"]:
+                previous = habitat["place"]
+                habitat["place"] = "HORIZON"
+                habitat["entered_at"] = _iso(now)
+                habitat["last_tick_at"] = _iso(now)
+                habitat["void_locked_until"] = None
+                habitat["event_ids"].append(event_id)
+                del habitat["event_ids"][:-HISTORY_CAPACITY]
+                reflex["graduated_at"] = _iso(now)
+                _record(habitat, {
+                    "event_id": event_id, "at": _iso(now), "type": "AUTO_GRADUATION",
+                    "from": previous, "to": "HORIZON",
+                })
+                _sync_morph_core_state(morph, sync_place=True)
+                refresh_snapshot(morph)
+                notices.append({"id": event_id, "kind": "GRADUATED", "morph_id": morph_id})
+                changed = True
+
+        if habitat["place"] in ACTIVE_PLACES:
+            window = int(now.timestamp()) // int(AUTOMATIC_CARE_INTERVAL.total_seconds())
+            payload = morph["snapshot"]["payload"]
+            needs = {
+                "FEED": int(payload["food_q8"]),
+                "WATER": int(payload["water_q8"]),
+                "PLAY": int(payload["play_q8"]),
+                "REST": int(payload["rest_q8"]),
+            }
+            action = min(needs, key=lambda item: (needs[item], item))
+            if needs[action] <= AUTOMATIC_CARE_THRESHOLD and reflex["last_care_window"] != window:
+                care_for_morph(ledger, {
+                    "schema": HABITAT_SCHEMA,
+                    "event_id": f"auto-care:{morph_id}:{window}",
+                    "morph_id": morph_id,
+                    "action": action,
+                }, now)
+                reflex["last_care_window"] = window
+                changed = True
+
+        if habitat["place"] == "CODE_HAVEN":
+            notice_id = f"code-haven:{morph_id}:{habitat['entered_at']}"
+            if notice_id not in reflex["notice_ids"]:
+                reflex["notice_ids"].append(notice_id)
+                del reflex["notice_ids"][:-16]
+                notices.append({"id": notice_id, "kind": "INTERVENTION", "morph_id": morph_id})
+                changed = True
+    return changed, notices
+
+
 def habitat_status(ledger: MorphTransferLedger, morph_id: str, now: datetime) -> dict[str, Any]:
     morph = ledger.data["morphs"].get(str(morph_id))
     if not morph:
@@ -322,6 +402,7 @@ def habitat_status(ledger: MorphTransferLedger, morph_id: str, now: datetime) ->
         "environment": deepcopy(habitat["environment"]),
         "presentation": deepcopy(habitat["presentation"]),
         "founder_axes": deepcopy(habitat["founder_axes"]),
+        "automatic_reflex": deepcopy(habitat["reflex"]),
         "life": deepcopy(morph["snapshot"]["payload"]),
     }
     result["presentation_binding"] = bind_presentation(

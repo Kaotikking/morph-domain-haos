@@ -9,6 +9,10 @@ the prepare/commit contract completes. Gender is mutable presentation state, not
 a DNA, lineage, element, or authority lock. Surfaces use neutral language when no
 presentation preference is present.
 
+Version 1.4 adds deterministic runtime reflexes derived from proven HAOS
+methods: 72-hour Nursery graduation, need-based eight-hour care, deduplicated
+graduation/Code Haven notifications, and an explicit automation ledger.
+
 ## Install
 
 Copy `custom_components/morph_domain` into Home Assistant, restart, then add
@@ -34,4 +38,5 @@ MorphDomain refuses to run beside an enabled legacy engine. Reconcile every
 Morph through the MorphDomain API before changing place or authority, and never
 enable both engines concurrently. Private Morph state remains for recovery or
 reinstall; uninstall never deletes it.
+
 

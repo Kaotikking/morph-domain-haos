@@ -131,6 +131,60 @@ def test_android_call_requires_committed_haos_horizon_morph():
         raise AssertionError("changed call replay was accepted")
 
 
+def test_nursery_graduates_once_after_72_hours_and_preserves_identity():
+    now = datetime(2026, 9, 8, tzinfo=UTC)
+    ledger = hosted(now)
+    morph = ledger.data["morphs"]["pulse"]
+    habitat.place_morph(ledger, {"schema": habitat.HABITAT_SCHEMA, "event_id": "nursery-entry", "morph_id": "pulse", "place": "NURSERY"}, now)
+    state = morph["habitat"]
+    state["entered_at"] = (now - timedelta(hours=72)).isoformat()
+    state["nursery_elapsed_seconds"] = 72 * 60 * 60
+    before = (morph["morph_id"], morph["founder_id"], morph["device_birth_lineage"])
+
+    changed, notices = habitat.run_automatic_reflexes(ledger, now)
+    assert changed is True
+    assert state["place"] == "HORIZON"
+    assert notices == [{"id": notices[0]["id"], "kind": "GRADUATED", "morph_id": "pulse"}]
+    assert before == (morph["morph_id"], morph["founder_id"], morph["device_birth_lineage"])
+
+    changed_again, notices_again = habitat.run_automatic_reflexes(ledger, now + timedelta(seconds=1))
+    assert changed_again is False
+    assert notices_again == []
+
+
+def test_automatic_care_is_need_based_silent_and_once_per_eight_hour_window():
+    now = datetime(2026, 9, 8, 8, tzinfo=UTC)
+    ledger = hosted(now)
+    morph = ledger.data["morphs"]["pulse"]
+    morph["snapshot"]["payload"]["water_q8"] = 40
+    transfer.refresh_snapshot(morph)
+
+    changed, notices = habitat.run_automatic_reflexes(ledger, now)
+    first_water = morph["snapshot"]["payload"]["water_q8"]
+    assert changed is True
+    assert notices == []
+    assert first_water == 88
+
+    changed_again, notices_again = habitat.run_automatic_reflexes(ledger, now + timedelta(hours=1))
+    assert changed_again is False
+    assert notices_again == []
+    assert morph["snapshot"]["payload"]["water_q8"] == first_water
+
+
+def test_code_haven_intervention_notice_is_deduplicated():
+    now = datetime(2026, 9, 8, tzinfo=UTC)
+    ledger = hosted(now)
+    habitat.place_morph(ledger, {"schema": habitat.HABITAT_SCHEMA, "event_id": "haven-entry", "morph_id": "pulse", "place": "CODE_HAVEN"}, now)
+    state = ledger.data["morphs"]["pulse"]["habitat"]
+
+    changed, notices = habitat.run_automatic_reflexes(ledger, now)
+    assert changed is True
+    assert notices[0]["kind"] == "INTERVENTION"
+    changed_again, notices_again = habitat.run_automatic_reflexes(ledger, now + timedelta(minutes=1))
+    assert changed_again is False
+    assert notices_again == []
+
+
 def test_android_call_rejects_every_non_horizon_or_unproven_morph():
     now = datetime(2026, 9, 6, tzinfo=UTC)
     for place in ("VOID", "NURSERY", "SEREIN_GARDENS", "CODE_HAVEN"):

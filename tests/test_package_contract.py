@@ -11,7 +11,7 @@ def test_hacs_layout_and_manifest():
     hacs = json.loads((ROOT / "hacs.json").read_text())
     assert manifest["domain"] == "morph_domain"
     assert manifest["config_flow"] is True
-    assert manifest["version"] == "1.3.0"
+    assert manifest["version"] == "1.4.0"
     assert manifest["documentation"].startswith("https://github.com/")
     assert manifest["issue_tracker"].startswith("https://github.com/")
     assert manifest["codeowners"]
@@ -64,4 +64,5 @@ def test_morph_first_operator_panel_is_packaged():
     assert 'PLACES=["VOID","NURSERY","SEREIN_GARDENS","HORIZON","CODE_HAVEN"]' in panel
     assert 'class="locations"' in panel
     assert 'class="morph-stage"' in panel
+
 

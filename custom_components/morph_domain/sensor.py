@@ -74,6 +74,7 @@ class MorphDomainHorizonEntity(SensorEntity):
                 "elemental_expression_q8": morph["environment"]["expression_q8"],
                 "dominant_environment": morph["environment"]["dominant"],
                 "environment_sample": morph["environment"]["last_sample"],
+                "automatic_reflex": morph.get("automatic_reflex"),
             })
         self._attr_native_value = sum(1 for row in rows if row["authority"] == "HAOS")
         self._attr_extra_state_attributes = {
@@ -81,3 +82,4 @@ class MorphDomainHorizonEntity(SensorEntity):
             "places": ["VOID", "NURSERY", "SEREIN_GARDENS", "HORIZON", "CODE_HAVEN"],
             "morphs": rows,
         }
+
