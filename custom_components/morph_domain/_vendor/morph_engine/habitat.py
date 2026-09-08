@@ -17,6 +17,7 @@ from ..morph_sdk.transfer import (
 from ..morph_sdk.presentation import (
     PresentationError, bind_presentation, change_presentation, neutral_presentation,
 )
+from .living_truth import FiveTierAxis, LivingTruthError
 
 HABITAT_SCHEMA = "serein.morph-habitat.v1"
 HABITAT_ENGINE = "haos-morph-habitat.v1"
@@ -85,6 +86,7 @@ def _habitat(morph: dict[str, Any], now: datetime) -> dict[str, Any]:
                 "dominant": None,
                 "last_sample": None,
             },
+            "founder_axes": {},
         }
         morph["habitat"] = habitat
     habitat.setdefault("environment", {
@@ -95,7 +97,99 @@ def _habitat(morph: dict[str, Any], now: datetime) -> dict[str, Any]:
         "last_sample": None,
     })
     habitat.setdefault("presentation", neutral_presentation(morph["morph_id"]))
+    habitat.setdefault("founder_axes", {})
     return habitat
+
+
+def register_founder_axis(
+    ledger: MorphTransferLedger, request: dict[str, Any], now: datetime
+) -> dict[str, Any]:
+    """Register a schema-stable founder capability at source tier 0 in Code Haven."""
+    _exact(
+        request,
+        {"schema", "event_id", "morph_id", "axis_id", "source_definition"},
+        "founder axis request",
+    )
+    if request["schema"] != HABITAT_SCHEMA:
+        raise TransferError("INVALID_SCHEMA", "founder axis request schema is not admitted")
+    morph = ledger.data["morphs"].get(str(request["morph_id"]))
+    if not morph:
+        raise TransferError("NOT_FOUND", "Morph is not known to HAOS")
+    _require_haos(morph)
+    habitat = _habitat(morph, now)
+    if habitat["place"] != "CODE_HAVEN":
+        raise TransferError("CODE_HAVEN_REQUIRED", "founder axes may be registered only in Code Haven")
+    axis_id = str(request["axis_id"])
+    event_id = str(request["event_id"])
+    previous = next((row for row in habitat["history"] if row.get("event_id") == event_id), None)
+    if previous is not None:
+        if (previous.get("type") != "FOUNDER_AXIS_REGISTERED"
+                or previous.get("axis_id") != axis_id
+                or previous.get("source_definition") != request["source_definition"]):
+            raise TransferError("REPLAY_CONFLICT", "founder axis event id payload changed")
+        return deepcopy(previous["result"])
+    try:
+        candidate = FiveTierAxis(
+            axis_id=axis_id,
+            founder_line=str(morph["founder_id"]),
+            source_definition=deepcopy(request["source_definition"]),
+        ).machine_record()
+    except LivingTruthError as err:
+        raise TransferError(err.code, str(err)) from err
+    existing = habitat["founder_axes"].get(axis_id)
+    if existing is not None and existing != candidate:
+        raise TransferError("FOUNDER_AXIS_CONFLICT", "founder axis source cannot be rewritten")
+    habitat["founder_axes"].setdefault(axis_id, candidate)
+    result = deepcopy(habitat["founder_axes"][axis_id])
+    _record(habitat, {
+        "event_id": event_id, "at": _iso(now),
+        "type": "FOUNDER_AXIS_REGISTERED", "axis_id": axis_id, "source_tier": 0,
+        "source_definition": deepcopy(request["source_definition"]), "result": result,
+    })
+    return result
+
+
+def advance_founder_axis(
+    ledger: MorphTransferLedger, request: dict[str, Any], now: datetime
+) -> dict[str, Any]:
+    """Activate 0→1 or move one lived tier while preserving founder provenance."""
+    _exact(request, {"schema", "event_id", "morph_id", "axis_id", "delta"}, "axis step request")
+    if request["schema"] != HABITAT_SCHEMA:
+        raise TransferError("INVALID_SCHEMA", "axis step schema is not admitted")
+    morph = ledger.data["morphs"].get(str(request["morph_id"]))
+    if not morph:
+        raise TransferError("NOT_FOUND", "Morph is not known to HAOS")
+    _require_haos(morph)
+    habitat = _habitat(morph, now)
+    axis_id = str(request["axis_id"])
+    event_id = str(request["event_id"])
+    previous = next((row for row in habitat["history"] if row.get("event_id") == event_id), None)
+    if previous is not None:
+        if (previous.get("type") != "FOUNDER_AXIS_STEP"
+                or previous.get("axis_id") != axis_id
+                or previous.get("delta") != request["delta"]):
+            raise TransferError("REPLAY_CONFLICT", "founder axis step event id payload changed")
+        return deepcopy(previous["result"])
+    record = habitat["founder_axes"].get(axis_id)
+    if record is None:
+        raise TransferError("FOUNDER_AXIS_NOT_FOUND", "founder axis is not registered")
+    try:
+        axis = FiveTierAxis(
+            axis_id=record["axis_id"], founder_line=record["founder_line"],
+            source_definition=deepcopy(record["source_definition"]),
+            current_tier=record["current_tier"],
+        )
+        axis.transition(request["delta"])
+    except LivingTruthError as err:
+        raise TransferError(err.code, str(err)) from err
+    habitat["founder_axes"][axis_id] = axis.machine_record()
+    result = deepcopy(habitat["founder_axes"][axis_id])
+    _record(habitat, {
+        "event_id": event_id, "at": _iso(now), "type": "FOUNDER_AXIS_STEP",
+        "axis_id": axis_id, "delta": request["delta"], "current_tier": axis.current_tier,
+        "result": result,
+    })
+    return result
 
 
 def _number(state: Any) -> float | None:
@@ -215,6 +309,7 @@ def habitat_status(ledger: MorphTransferLedger, morph_id: str, now: datetime) ->
         "nursery_elapsed_seconds": habitat["nursery_elapsed_seconds"],
         "environment": deepcopy(habitat["environment"]),
         "presentation": deepcopy(habitat["presentation"]),
+        "founder_axes": deepcopy(habitat["founder_axes"]),
         "life": deepcopy(morph["snapshot"]["payload"]),
     }
     result["presentation_binding"] = bind_presentation(
