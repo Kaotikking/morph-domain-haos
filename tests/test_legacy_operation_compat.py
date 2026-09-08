@@ -2,11 +2,13 @@ from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 import importlib.util
 from pathlib import Path
+import sys
 
 
 MODULE = Path(__file__).parents[1] / "custom_components/morph_domain/_vendor/morph_sdk/transfer.py"
 spec = importlib.util.spec_from_file_location("morph_transfer_legacy_compat", MODULE)
 module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
 spec.loader.exec_module(module)
 
 
