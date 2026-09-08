@@ -30,11 +30,12 @@ def test_two_active_engines_are_denied():
 
 
 def test_migration_is_copy_only():
-    source = (COMPONENT / "morph_transfer.py").read_text()
+    source = (COMPONENT / "_vendor/morph_sdk/transfer.py").read_text()
+    adapter = (COMPONENT / "morph_transfer.py").read_text()
     assert 'STORE_KEY = "morph_domain.transfer"' in source
     assert 'LEGACY_STORE_KEY = "serein_gateway.morph_transfer"' in source
-    assert "deepcopy(legacy_data)" in source
-    assert "legacy_store.async_remove" not in source
+    assert "deepcopy(legacy_data)" in adapter
+    assert "legacy_store.async_remove" not in source + adapter
 
 
 def test_routes_are_public_versioned_morphdomain_routes():
