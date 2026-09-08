@@ -11,7 +11,7 @@ def test_hacs_layout_and_manifest():
     hacs = json.loads((ROOT / "hacs.json").read_text())
     assert manifest["domain"] == "morph_domain"
     assert manifest["config_flow"] is True
-    assert manifest["version"] == "1.0.3"
+    assert manifest["version"] == "1.1.0"
     assert manifest["documentation"].startswith("https://github.com/")
     assert manifest["issue_tracker"].startswith("https://github.com/")
     assert manifest["codeowners"]
@@ -49,7 +49,18 @@ def test_routes_are_public_versioned_morphdomain_routes():
 
 def test_gender_is_presentation_not_dna():
     readme = (ROOT / "README.md").read_text().lower()
-    core = (COMPONENT / "morph_core.py").read_text().lower()
+    core = (COMPONENT / "_vendor/morph_sdk/morph_core.py").read_text().lower()
     assert "gender is mutable presentation state" in readme
     assert "gender" not in core
+
+
+def test_morph_first_operator_panel_is_packaged():
+    setup = (COMPONENT / "__init__.py").read_text(encoding="utf-8")
+    panel = (COMPONENT / "frontend/morph-domain-panel.js").read_text(encoding="utf-8")
+    assert 'frontend_url_path=PANEL_PATH' in setup
+    assert 'require_admin=True' in setup
+    assert 'hass.callApi("POST", "morph-domain/v1/habitat/list", {})' in panel
+    assert 'PLACES=["VOID","NURSERY","SEREIN_GARDENS","HORIZON","CODE_HAVEN"]' in panel
+    assert 'class="locations"' in panel
+    assert 'class="morph-stage"' in panel
 
