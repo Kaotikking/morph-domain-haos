@@ -7,13 +7,14 @@ from homeassistant.core import HomeAssistant
 from .const import DOMAIN
 from .morph_habitat import HABITAT_DATA_KEY, async_setup_morph_habitat
 from .morph_transfer import DATA_KEY, async_setup_morph_transfer
+from .migration import legacy_engine_enabled
 
 PLATFORMS = (Platform.SENSOR,)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Load MorphDomain without claiming authority over any Morph."""
-    if hass.config_entries.async_entries("serein_gateway"):
+    if legacy_engine_enabled(hass):
         # Two active life engines may never share or fork Morph authority.
         return False
     await async_setup_morph_transfer(hass)
@@ -34,3 +35,4 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.services.async_remove(DOMAIN, "morph_care")
     hass.data.pop(DATA_KEY, None)
     return True
+
