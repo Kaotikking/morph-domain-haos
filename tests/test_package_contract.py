@@ -11,7 +11,7 @@ def test_hacs_layout_and_manifest():
     hacs = json.loads((ROOT / "hacs.json").read_text())
     assert manifest["domain"] == "morph_domain"
     assert manifest["config_flow"] is True
-    assert manifest["version"] == "1.0.2"
+    assert manifest["version"] == "1.0.3"
     assert manifest["documentation"].startswith("https://github.com/")
     assert manifest["issue_tracker"].startswith("https://github.com/")
     assert manifest["codeowners"]
@@ -42,6 +42,8 @@ def test_routes_are_public_versioned_morphdomain_routes():
     text += (COMPONENT / "morph_habitat.py").read_text()
     assert 'url = "/api/morph-domain/v1/transfer/{action}"' in text
     assert 'url = "/api/morph-domain/v1/habitat/{action}"' in text
+    assert 'action == "register-axis"' in text
+    assert 'action == "advance-axis"' in text
     assert 'url = "/api/serein/' not in text
 
 
