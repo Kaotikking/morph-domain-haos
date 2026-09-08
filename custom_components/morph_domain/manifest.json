@@ -1,7 +1,7 @@
 {
   "domain": "morph_domain",
   "name": "MorphDomain",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "documentation": "https://github.com/Kaotikking/morph-domain-haos",
   "issue_tracker": "https://github.com/Kaotikking/morph-domain-haos/issues",
   "codeowners": ["@Kaotikking"],
