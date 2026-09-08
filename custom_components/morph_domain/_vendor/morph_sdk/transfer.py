@@ -561,10 +561,14 @@ class MorphTransferLedger:
         """Recover expired interrupted handoffs without creating two owners."""
         changed = False
         for op in self.data["operations"].values():
-            if op["state"] == "PREPARED" and _parse_time(op["expires_at"]) <= now:
+            # Historical migration/repair receipts predate the transfer-state
+            # field. Preserve them as evidence; only live transfer operations
+            # participate in expiry reconciliation.
+            state = op.get("state")
+            if state == "PREPARED" and _parse_time(op["expires_at"]) <= now:
                 op["state"] = "EXPIRED"
                 changed = True
-            elif op["state"] == "RETURN_PREPARED" and _parse_time(op["expires_at"]) <= now:
+            elif state == "RETURN_PREPARED" and _parse_time(op["expires_at"]) <= now:
                 morph = self.data["morphs"].get(op["morph_id"])
                 if (morph and morph["authority"] == "FROZEN_FOR_RETURN"
                         and morph["generation"] == op["generation"]
