@@ -11,7 +11,7 @@ def test_hacs_layout_and_manifest():
     hacs = json.loads((ROOT / "hacs.json").read_text())
     assert manifest["domain"] == "morph_domain"
     assert manifest["config_flow"] is True
-    assert manifest["version"] == "1.1.0"
+    assert manifest["version"] == "1.1.1"
     assert manifest["documentation"].startswith("https://github.com/")
     assert manifest["issue_tracker"].startswith("https://github.com/")
     assert manifest["codeowners"]
@@ -30,11 +30,12 @@ def test_two_active_engines_are_denied():
 
 
 def test_migration_is_copy_only():
-    source = (COMPONENT / "morph_transfer.py").read_text()
+    source = (COMPONENT / "_vendor/morph_sdk/transfer.py").read_text()
+    adapter = (COMPONENT / "morph_transfer.py").read_text()
     assert 'STORE_KEY = "morph_domain.transfer"' in source
     assert 'LEGACY_STORE_KEY = "serein_gateway.morph_transfer"' in source
-    assert "deepcopy(legacy_data)" in source
-    assert "legacy_store.async_remove" not in source
+    assert "deepcopy(legacy_data)" in adapter
+    assert "legacy_store.async_remove" not in source + adapter
 
 
 def test_routes_are_public_versioned_morphdomain_routes():
