@@ -24,3 +24,13 @@ The predecessor snapshot is retained for rollback and replay is idempotent.
 This is not a general Void write path; ordinary Morph repairs remain Code Haven
 operations.
 
+## Automatic transfer alignment
+
+Beginning with MorphDomain 1.3, a newly committed transfer carrying portable
+life with the legacy one-Core layout is automatically aligned inside Code
+Haven. The alignment preserves identity, lineage, life counters, embodiment,
+and the existing chronicle; appends one attributable alignment event; derives
+the deterministic elemental voice; records the predecessor snapshot; and
+leaves the Morph in Code Haven for inspection. Already aligned Morphs and
+Dustdevil's unique Inward Bloom are never rewritten by this reflex.
+

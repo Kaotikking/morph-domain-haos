@@ -7,6 +7,7 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "custom_components/morph_doma
 
 from morph_sdk.morph_core import (
     MORPH_NINE_CORE_SCHEMA,
+    align_in_code_haven,
     awaken_inward_bloom,
     validate_morph_core,
     verify_successor,
@@ -58,4 +59,19 @@ def test_inward_bloom_is_deterministic_and_preserves_life_identity():
     )["audio"]
     validate_morph_core(after)
     verify_successor(before, after)
+
+
+def test_code_haven_alignment_preserves_truth_and_is_not_inward_bloom():
+    before = _legacy_core()
+    before["state"].update({"place": "HORIZON", "active_frame": "phone-frame",
+                            "authority": "REMOTE_ACTIVE"})
+    after = align_in_code_haven(before, "c" * 64, "auto-nine-core:1234",
+                                "2026-09-08T00:00:00Z", "haos-code-haven", "d" * 64)
+    assert after["root"]["identity"] == before["identity"]
+    assert after["memory"]["life"] == before["life"]
+    assert after["root"]["historic_role"] == "lineage-member"
+    assert after["root"]["emergence_event"] == "transfer-alignment"
+    assert after["cloud"]["place"] == "CODE_HAVEN"
+    assert after["cloud"]["authority"] == "HAOS_ACTIVE"
+    assert after["memory"]["chronicle"]["events"][-1]["kind"] == "nine-core-alignment"
 

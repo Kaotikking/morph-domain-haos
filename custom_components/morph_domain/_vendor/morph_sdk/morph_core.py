@@ -218,6 +218,48 @@ def awaken_inward_bloom(previous: dict[str, Any], genome_sha256: str,
     return validate_nine_core(result)
 
 
+def align_in_code_haven(previous: dict[str, Any], genome_sha256: str,
+                         event_id: str, observed_at: str, actor: str,
+                         evidence_digest: str) -> dict[str, Any]:
+    """Upgrade one transferred legacy Core at the Code Haven write boundary."""
+    old = validate_morph_core(previous)
+    if old["schema"] != MORPH_CORE_SCHEMA:
+        return old
+    identity = old["identity"]
+    for value, name in ((event_id, "event_id"), (actor, "actor")): _id(value, name)
+    _timestamp(observed_at)
+    if not DIGEST_RE.fullmatch(str(evidence_digest)):
+        raise MorphCoreError("INVALID_MORPH_CORE", "evidence digest is invalid")
+    chronicle = deepcopy(old["chronicle"])
+    chronicle["events"].append({
+        "event_id": event_id, "kind": "nine-core-alignment",
+        "observed_at": observed_at, "source": actor,
+        "place": "CODE_HAVEN", "frame": "haos-code-haven",
+        "evidence_digest": evidence_digest,
+    })
+    visual_seed = hashlib.sha256((identity["morph_id"] + "|nine-core").encode()).hexdigest()
+    element = identity["primitive_element"].lower()
+    result = {
+        "schema": MORPH_NINE_CORE_SCHEMA,
+        "platform": {"runtime": "frame-kernel-v1", "embodiment": deepcopy(old["embodiment"])},
+        "root": {"identity": deepcopy(identity), "historic_role": "lineage-member",
+                 "core_origin": "code-haven-aligned", "emergence_event": "transfer-alignment"},
+        "memory": {"life": deepcopy(old["life"]), "chronicle": chronicle},
+        "knowledge": {"schema": "serein.morph-knowledge.v1", "learned": {}},
+        "ui": {"expression": old["state"]["expression"], "visual_seed": visual_seed,
+               "expression_stage": 1},
+        "audio": derive_elemental_voice(identity, genome_sha256, element, "lineage-voice", 1),
+        "personality": {"mood": old["state"]["mood"], "active_trait": "unexpressed",
+                        "trait_origin": "lineage-latent", "trait_stage": 1},
+        "modular": {"capabilities": deepcopy(old["embodiment"]["capabilities"])},
+        "cloud": {"place": "CODE_HAVEN", "authority": "HAOS_ACTIVE",
+                  "active_frame": "haos-code-haven", "needs_q8": deepcopy(old["state"]["needs_q8"]),
+                  "reconciliation": "local-first"},
+    }
+    verify_successor(old, result)
+    return validate_nine_core(result)
+
+
 def core_identity(core: dict[str, Any]) -> dict[str, Any]:
     return core["root"]["identity"] if core.get("schema") == MORPH_NINE_CORE_SCHEMA else core["identity"]
 

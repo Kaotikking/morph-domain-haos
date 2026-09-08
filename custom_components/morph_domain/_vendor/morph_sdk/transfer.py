@@ -16,8 +16,8 @@ import json
 from typing import Any
 
 try:
-    from .morph_core import (MorphCoreError, awaken_inward_bloom, core_identity,
-                             core_state, set_core_authority, validate_morph_core,
+    from .morph_core import (MorphCoreError, align_in_code_haven, awaken_inward_bloom, core_identity,
+                             core_life, core_state, set_core_authority, validate_morph_core,
                              verify_successor)
 except ImportError:  # Direct module loading in the focused contract tests.
     import importlib.util
@@ -26,8 +26,10 @@ except ImportError:  # Direct module loading in the focused contract tests.
     _core_module = importlib.util.module_from_spec(_core_spec)
     _core_spec.loader.exec_module(_core_module)
     MorphCoreError = _core_module.MorphCoreError
+    align_in_code_haven = _core_module.align_in_code_haven
     awaken_inward_bloom = _core_module.awaken_inward_bloom
     core_identity = _core_module.core_identity
+    core_life = _core_module.core_life
     core_state = _core_module.core_state
     set_core_authority = _core_module.set_core_authority
     validate_morph_core = _core_module.validate_morph_core
@@ -273,6 +275,30 @@ class MorphTransferLedger:
             "genome": op["genome"], "genome_sha256": op["genome_sha256"],
             "snapshot_digest": op["snapshot_digest"], "source_frame": op["source_frame"],
             "committed_at": now.astimezone(UTC).isoformat().replace("+00:00", "Z")}
+        morph = self.data["morphs"][op["morph_id"]]
+        core = morph["snapshot"].get("payload", {}).get("morph_core")
+        if (morph["snapshot"]["schema"] == MORPH_CORE_LIFE_SCHEMA
+                and isinstance(core, dict) and core.get("schema") == "serein.morph-core.v1"
+                and morph["morph_id"] != FIRST_WHOLE_MORPH_ID):
+            alignment_id = "auto-nine-core:" + hashlib.sha256(transfer_id.encode()).hexdigest()[:24]
+            predecessor_snapshot = deepcopy(morph["snapshot"])
+            observed_at = now.astimezone(UTC).isoformat().replace("+00:00", "Z")
+            try:
+                morph["snapshot"]["payload"]["morph_core"] = align_in_code_haven(
+                    core, morph["genome_sha256"], alignment_id, observed_at,
+                    "haos-code-haven", op["request_fingerprint"],
+                )
+            except MorphCoreError as err:
+                raise TransferError(err.code, str(err)) from err
+            refresh_snapshot(morph)
+            self.data["operations"][alignment_id] = {
+                "operation_kind": "AUTO_NINE_CORE_ALIGNMENT", "state": "ALIGNED_CODE_HAVEN",
+                "morph_id": morph["morph_id"], "founder_id": morph["founder_id"],
+                "generation": morph["generation"], "authority": "HAOS",
+                "transfer_id": transfer_id, "snapshot_digest": morph["snapshot_digest"],
+                "predecessor_snapshot": predecessor_snapshot,
+                "snapshot": deepcopy(morph["snapshot"]), "completed_at": observed_at,
+            }
         op["state"], op["authority"] = "ACTIVE_HAOS", "HAOS"
         return self.status(transfer_id)
 
@@ -485,9 +511,10 @@ class MorphTransferLedger:
         if morph["snapshot"]["schema"] != MORPH_CORE_LIFE_SCHEMA:
             raise TransferError("INCOMPATIBLE_LIFE_SCHEMA", "repair requires Morph Core v3")
         core = morph["snapshot"]["payload"]["morph_core"]
-        if core["state"]["place"] != "CODE_HAVEN" or core["state"]["active_frame"] != "haos-code-haven":
+        state = core_state(core)
+        if state["place"] != "CODE_HAVEN" or state["active_frame"] != "haos-code-haven":
             raise TransferError("CODE_HAVEN_REQUIRED", "Morph Core repair is admitted only inside Code Haven")
-        identity = core["identity"]
+        identity = core_identity(core)
         if identity["primitive_element"] != request["expected_current_element"]:
             raise TransferError("REPAIR_PRESTATE_MISMATCH", "current primitive element differs from repair prestate")
         canonical = CANONICAL_FOUNDER_PRIMITIVES.get(morph["founder_id"])
@@ -495,7 +522,8 @@ class MorphTransferLedger:
             raise TransferError("NONCANONICAL_REPAIR", "requested primitive is not canonical for this founder")
         predecessor_snapshot = deepcopy(morph["snapshot"])
         identity["primitive_element"] = canonical
-        core["chronicle"]["events"].append({
+        chronicle = core["memory"]["chronicle"] if core.get("schema") == "serein.morph-nine-core.v1" else core["chronicle"]
+        chronicle["events"].append({
             "event_id": repair_id, "kind": "lineage-correction",
             "observed_at": request["created_at"], "source": request["actor"],
             "place": "CODE_HAVEN", "frame": "haos-code-haven",

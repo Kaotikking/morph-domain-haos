@@ -79,10 +79,12 @@ def _sync_morph_core_state(morph: dict[str, Any], *, sync_place: bool = False) -
 def _habitat(morph: dict[str, Any], now: datetime) -> dict[str, Any]:
     habitat = morph.get("habitat")
     if not isinstance(habitat, dict):
+        core = morph.get("snapshot", {}).get("payload", {}).get("morph_core", {})
+        initial_place = core.get("cloud", {}).get("place", "HORIZON")
         habitat = {
             "schema": HABITAT_SCHEMA,
             "engine_version": HABITAT_ENGINE,
-            "place": "HORIZON",
+            "place": initial_place,
             "entered_at": _iso(now),
             "last_tick_at": _iso(now),
             "void_locked_until": None,
