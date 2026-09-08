@@ -79,6 +79,10 @@ class MorphTransferManager:
             place_morph,
             read_environment,
             update_presentation,
+            register_founder_axis,
+            advance_founder_axis,
+            register_founder_axis,
+            advance_founder_axis,
         )
 
         async with self.lock:
@@ -105,6 +109,18 @@ class MorphTransferManager:
                 changed = True
             elif action == "presentation":
                 result = update_presentation(candidate, body, now)
+                changed = True
+            elif action == "register-axis":
+                result = register_founder_axis(candidate, body, now)
+                changed = True
+            elif action == "advance-axis":
+                result = advance_founder_axis(candidate, body, now)
+                changed = True
+            elif action == "register-axis":
+                result = register_founder_axis(candidate, body, now)
+                changed = True
+            elif action == "advance-axis":
+                result = advance_founder_axis(candidate, body, now)
                 changed = True
             elif action == "history":
                 _exact(body, {"morph_id"}, "history request")
@@ -153,3 +169,4 @@ async def async_setup_morph_transfer(hass: HomeAssistant) -> None:
     manager.store = store
     hass.data[DATA_KEY] = manager
     hass.http.register_view(MorphTransferView)
+
