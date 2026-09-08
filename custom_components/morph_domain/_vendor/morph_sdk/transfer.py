@@ -409,7 +409,10 @@ class MorphTransferLedger:
             raise TransferError("GENERATION_CONFLICT", "generation differs from current state")
         if not hmac.compare_digest(str(request["predecessor_snapshot_digest"]), morph["snapshot_digest"]):
             raise TransferError("PREDECESSOR_DIGEST_MISMATCH", "predecessor differs from frozen checkpoint")
-        if morph.get("habitat", {}).get("place") != "VOID" or morph.get("habitat", {}).get("engine_state") != "STASIS":
+        # Habitat STASIS is a derived API state for VOID; the durable ledger
+        # stores the place while the life engine remains deferred.
+        if (morph.get("habitat", {}).get("place") != "VOID"
+                or morph.get("engine_state") != "ACTIVE_DEFERRED_TICK"):
             raise TransferError("INWARD_BLOOM_PRESTATE_MISMATCH", "Dustdevil must be in Void stasis")
         for field in ("bloom_id", "actor"):
             if not isinstance(request[field], str) or not request[field]:
