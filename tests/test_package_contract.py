@@ -11,7 +11,7 @@ def test_hacs_layout_and_manifest():
     hacs = json.loads((ROOT / "hacs.json").read_text())
     assert manifest["domain"] == "morph_domain"
     assert manifest["config_flow"] is True
-    assert manifest["version"] == "1.0.1"
+    assert manifest["version"] == "1.0.2"
     assert manifest["documentation"].startswith("https://github.com/")
     assert manifest["issue_tracker"].startswith("https://github.com/")
     assert manifest["codeowners"]
