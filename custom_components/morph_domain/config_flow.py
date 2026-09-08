@@ -3,6 +3,7 @@
 from homeassistant import config_entries
 
 from .const import DOMAIN
+from .migration import legacy_engine_enabled
 
 
 class MorphDomainConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -14,8 +15,9 @@ class MorphDomainConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Install locally with no external credentials."""
         await self.async_set_unique_id(DOMAIN)
         self._abort_if_unique_id_configured()
-        if self.hass.config_entries.async_entries("serein_gateway"):
+        if legacy_engine_enabled(self.hass):
             return self.async_abort(reason="legacy_engine_active")
         if user_input is None:
             return self.async_show_form(step_id="user")
         return self.async_create_entry(title="MorphDomain", data={})
+
