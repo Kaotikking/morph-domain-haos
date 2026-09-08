@@ -16,6 +16,10 @@ from homeassistant.helpers.storage import Store
 from ._vendor.morph_sdk.transfer import *
 from ._vendor.morph_sdk.transfer import _exact
 
+# Kept explicit for migration auditing and package-contract readback.
+STORE_KEY = "morph_domain.transfer"
+LEGACY_STORE_KEY = "serein_gateway.morph_transfer"
+
 class MorphTransferView(HomeAssistantView):
     url = "/api/morph-domain/v1/transfer/{action}"
     name = "api:morph-domain:v1:transfer"
@@ -47,6 +51,7 @@ class MorphTransferManager:
             candidate.reconcile_expired(now)
             if action == "prepare": result = candidate.prepare_inbound(body, now)
             elif action == "migrate": result = candidate.migrate_to_morph_core(body, now)
+            elif action == "inward-bloom": result = candidate.record_inward_bloom(body, now)
             elif action == "repair-element": result = candidate.repair_primitive_element(body, now)
             elif action == "commit":
                 _exact(body, {"transfer_id", "snapshot_digest"}, "commit request")

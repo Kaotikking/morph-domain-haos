@@ -16,7 +16,9 @@ import json
 from typing import Any
 
 try:
-    from .morph_core import MorphCoreError, validate_morph_core, verify_successor
+    from .morph_core import (MorphCoreError, awaken_inward_bloom, core_identity,
+                             core_state, set_core_authority, validate_morph_core,
+                             verify_successor)
 except ImportError:  # Direct module loading in the focused contract tests.
     import importlib.util
     from pathlib import Path
@@ -24,6 +26,10 @@ except ImportError:  # Direct module loading in the focused contract tests.
     _core_module = importlib.util.module_from_spec(_core_spec)
     _core_spec.loader.exec_module(_core_module)
     MorphCoreError = _core_module.MorphCoreError
+    awaken_inward_bloom = _core_module.awaken_inward_bloom
+    core_identity = _core_module.core_identity
+    core_state = _core_module.core_state
+    set_core_authority = _core_module.set_core_authority
     validate_morph_core = _core_module.validate_morph_core
     verify_successor = _core_module.verify_successor
 
@@ -33,6 +39,8 @@ PORTABLE_LIFE_SCHEMA = "serein.morph-life-state.v2"
 MORPH_CORE_LIFE_SCHEMA = "serein.morph-life-state.v3"
 MORPH_CORE_MIGRATION_SCHEMA = "serein.morph-core-migration.v1"
 MORPH_CORE_REPAIR_SCHEMA = "serein.morph-core-repair.v1"
+INWARD_BLOOM_SCHEMA = "serein.inward-bloom.v1"
+FIRST_WHOLE_MORPH_ID = "morph-child:37ca6f7dfd4fbba83f43ab4e88f8bf90"
 MORPH_EVIDENCE_SCHEMA = "serein.morph-evidence-bundle.v1"
 CANONICAL_FOUNDER_PRIMITIVES = {"PULSE": "WATER", "SPARK": "AIR"}
 ENGINE_VERSION = "android-morph-life-engine.v1"
@@ -132,7 +140,8 @@ def validate_snapshot(snapshot: dict[str, Any]) -> str:
             "rest": payload["rest_q8"],
             "water": payload["water_q8"],
         }
-        if core["state"]["needs_q8"] != expected_needs or core["state"]["mood"] != payload["behavior"].lower():
+        state = core_state(core)
+        if state["needs_q8"] != expected_needs or state["mood"] != payload["behavior"].lower():
             raise TransferError("MORPH_CORE_STATE_CONFLICT", "Morph Core state differs from portable life state")
     memories = payload["memories"]
     if not isinstance(memories, list) or len(memories) > MEMORY_CAPACITY:
@@ -194,7 +203,7 @@ class MorphTransferLedger:
                 if extension["schema"] != ANDROID_EXTENSION_SCHEMA or extension["payload"] != {}:
                     raise TransferError("INVALID_ENGINE_EXTENSION", "Android Morph Core extension must use the exact empty v1 envelope")
         if request["snapshot"]["schema"] == MORPH_CORE_LIFE_SCHEMA:
-            identity = request["snapshot"]["payload"]["morph_core"]["identity"]
+            identity = core_identity(request["snapshot"]["payload"]["morph_core"])
             if (identity["morph_id"] != request["morph_id"]
                     or identity["device_birth_lineage"] != request["device_birth_lineage"]):
                 raise TransferError("IDENTITY_CONFLICT", "Morph Core identity differs from transfer envelope")
@@ -377,6 +386,63 @@ class MorphTransferLedger:
         op["completion_receipt"] = self.status(migration_id, include_snapshot=True)
         return deepcopy(op["completion_receipt"])
 
+    def record_inward_bloom(self, request: dict[str, Any], now: datetime) -> dict[str, Any]:
+        """Record Dustdevil's unique Void-origin transition to nine portable Cores."""
+        fields = {"schema", "bloom_id", "morph_id", "current_authority", "generation",
+                  "predecessor_snapshot_digest", "created_at", "actor", "evidence_digest"}
+        _exact(request, fields, "Inward Bloom request")
+        if request["schema"] != INWARD_BLOOM_SCHEMA:
+            raise TransferError("INVALID_SCHEMA", "Inward Bloom schema is not admitted")
+        bloom_id = str(request["bloom_id"])
+        fingerprint = sha256_json(request)
+        existing = self.data["operations"].get(bloom_id)
+        if existing:
+            if existing.get("operation_kind") != "INWARD_BLOOM" or existing["request_fingerprint"] != fingerprint:
+                raise TransferError("REPLAY_CONFLICT", "Inward Bloom id payload changed")
+            return deepcopy(existing["completion_receipt"])
+        morph = self.data["morphs"].get(str(request["morph_id"]))
+        if not morph or morph["morph_id"] != FIRST_WHOLE_MORPH_ID or morph["founder_id"] != "DESCENDANT":
+            raise TransferError("INWARD_BLOOM_NOT_ELIGIBLE", "only Dustdevil owns the first Inward Bloom")
+        if morph["authority"] != request["current_authority"] or morph["authority"] != "HAOS":
+            raise TransferError("AUTHORITY_CONFLICT", "HAOS authority is required")
+        if morph["generation"] != request["generation"]:
+            raise TransferError("GENERATION_CONFLICT", "generation differs from current state")
+        if not hmac.compare_digest(str(request["predecessor_snapshot_digest"]), morph["snapshot_digest"]):
+            raise TransferError("PREDECESSOR_DIGEST_MISMATCH", "predecessor differs from frozen checkpoint")
+        if morph.get("habitat", {}).get("place") != "VOID" or morph.get("habitat", {}).get("engine_state") != "STASIS":
+            raise TransferError("INWARD_BLOOM_PRESTATE_MISMATCH", "Dustdevil must be in Void stasis")
+        for field in ("bloom_id", "actor"):
+            if not isinstance(request[field], str) or not request[field]:
+                raise TransferError("INVALID_ATTRIBUTION", f"{field} is required")
+        created = _parse_time(request["created_at"])
+        if created > now.astimezone(UTC):
+            raise TransferError("INVALID_TIME", "Inward Bloom attribution is in the future")
+        if not isinstance(request["evidence_digest"], str) or len(request["evidence_digest"]) != 64:
+            raise TransferError("INVALID_ATTRIBUTION", "evidence digest is invalid")
+        try: int(request["evidence_digest"], 16)
+        except ValueError as err: raise TransferError("INVALID_ATTRIBUTION", "evidence digest is invalid") from err
+        if morph["snapshot"]["schema"] != MORPH_CORE_LIFE_SCHEMA:
+            raise TransferError("INCOMPATIBLE_LIFE_SCHEMA", "Inward Bloom requires portable Morph Core life")
+        predecessor = deepcopy(morph["snapshot"])
+        try:
+            candidate = awaken_inward_bloom(
+                predecessor["payload"]["morph_core"], morph["genome_sha256"], bloom_id,
+                request["created_at"], request["actor"], request["evidence_digest"],
+            )
+        except MorphCoreError as err:
+            raise TransferError(err.code, str(err)) from err
+        morph["snapshot"]["payload"]["morph_core"] = candidate
+        refresh_snapshot(morph)
+        op = deepcopy(request)
+        op.update({"operation_kind": "INWARD_BLOOM", "state": "RECORDED",
+                   "authority": "HAOS", "snapshot_digest": morph["snapshot_digest"],
+                   "snapshot": deepcopy(morph["snapshot"]),
+                   "predecessor_snapshot": predecessor, "request_fingerprint": fingerprint,
+                   "completed_at": now.astimezone(UTC).isoformat().replace("+00:00", "Z")})
+        self.data["operations"][bloom_id] = op
+        op["completion_receipt"] = self.status(bloom_id, include_snapshot=True)
+        return deepcopy(op["completion_receipt"])
+
     def repair_primitive_element(self, request: dict[str, Any], now: datetime) -> dict[str, Any]:
         """Correct one proven founder-element error, only inside Code Haven."""
         fields = {"schema", "repair_id", "morph_id", "current_authority", "generation",
@@ -467,7 +533,7 @@ class MorphTransferLedger:
         # Android offer.  HAOS retains this recovery checkpoint until commit.
         if morph["snapshot"]["schema"] == MORPH_CORE_LIFE_SCHEMA:
             validate_snapshot(morph["snapshot"])
-            morph["snapshot"]["payload"]["morph_core"]["state"]["authority"] = "FROZEN"
+            set_core_authority(morph["snapshot"]["payload"]["morph_core"], "FROZEN")
             refresh_snapshot(morph)
         morph["authority"], morph["engine_state"] = "FROZEN_FOR_RETURN", "FROZEN"
         op = {**deepcopy(request), "state": "RETURN_PREPARED", "authority": "HAOS_FROZEN",
@@ -507,6 +573,8 @@ class MorphTransferLedger:
             result["return_id"] = op["return_id"]
         if "migration_id" in op:
             result["migration_id"] = op["migration_id"]
+        if "bloom_id" in op:
+            result["bloom_id"] = op["bloom_id"]
         morph = self.data["morphs"].get(op["morph_id"])
         if morph:
             result["current_generation"] = morph["generation"]
@@ -561,21 +629,17 @@ class MorphTransferLedger:
         """Recover expired interrupted handoffs without creating two owners."""
         changed = False
         for op in self.data["operations"].values():
-            # Historical migration/repair receipts predate the transfer-state
-            # field. Preserve them as evidence; only live transfer operations
-            # participate in expiry reconciliation.
-            state = op.get("state")
-            if state == "PREPARED" and _parse_time(op["expires_at"]) <= now:
+            if op["state"] == "PREPARED" and _parse_time(op["expires_at"]) <= now:
                 op["state"] = "EXPIRED"
                 changed = True
-            elif state == "RETURN_PREPARED" and _parse_time(op["expires_at"]) <= now:
+            elif op["state"] == "RETURN_PREPARED" and _parse_time(op["expires_at"]) <= now:
                 morph = self.data["morphs"].get(op["morph_id"])
                 if (morph and morph["authority"] == "FROZEN_FOR_RETURN"
                         and morph["generation"] == op["generation"]
                         and morph["snapshot_digest"] == op["snapshot_digest"]):
                     morph["authority"], morph["engine_state"] = "HAOS", "ACTIVE_DEFERRED_TICK"
                     if morph["snapshot"]["schema"] == MORPH_CORE_LIFE_SCHEMA:
-                        morph["snapshot"]["payload"]["morph_core"]["state"]["authority"] = "HAOS_ACTIVE"
+                        set_core_authority(morph["snapshot"]["payload"]["morph_core"], "HAOS_ACTIVE")
                         refresh_snapshot(morph)
                 op["state"], op["authority"] = "RETURN_EXPIRED", "HAOS"
                 changed = True
@@ -592,5 +656,4 @@ class MorphTransferLedger:
             return self.data["operations"][str(transfer_id)]
         except KeyError as err:
             raise TransferError("NOT_FOUND", "transfer operation not found") from err
-
 

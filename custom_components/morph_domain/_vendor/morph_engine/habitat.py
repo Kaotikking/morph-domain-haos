@@ -14,6 +14,7 @@ from ..morph_sdk.transfer import (
     _exact,
     refresh_snapshot,
 )
+from ..morph_sdk.morph_core import MORPH_NINE_CORE_SCHEMA
 from ..morph_sdk.presentation import (
     PresentationError, bind_presentation, change_presentation, neutral_presentation,
 )
@@ -49,7 +50,13 @@ def _sync_morph_core_state(morph: dict[str, Any], *, sync_place: bool = False) -
     if snapshot["schema"] != "serein.morph-life-state.v3":
         return
     payload = snapshot["payload"]
-    state = payload["morph_core"]["state"]
+    core = payload["morph_core"]
+    if core.get("schema") == MORPH_NINE_CORE_SCHEMA:
+        state = core["cloud"]
+        personality = core["personality"]
+    else:
+        state = core["state"]
+        personality = None
     state["needs_q8"] = {
         "attention": payload["attention_q8"],
         "energy": 255 - payload["fatigue_q8"],
@@ -58,7 +65,10 @@ def _sync_morph_core_state(morph: dict[str, Any], *, sync_place: bool = False) -
         "rest": payload["rest_q8"],
         "water": payload["water_q8"],
     }
-    state["mood"] = payload["behavior"].lower()
+    if personality is None:
+        state["mood"] = payload["behavior"].lower()
+    else:
+        personality["mood"] = payload["behavior"].lower()
     state["authority"] = "HAOS_ACTIVE"
     if sync_place:
         place = morph["habitat"]["place"]
