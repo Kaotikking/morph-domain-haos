@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import hashlib
+import json
+import math
 import re
 from typing import Any
 
 ENGINE_SCHEMA = "serein.morph-engine.v1"
-CORE_ORDER = (
-    "platform", "root", "memory", "knowledge", "ui",
-    "audio", "personality", "modular", "cloud",
-)
+PORTABLE_SCHEMA = "serein.morph-nine-core.v1"
+SERN_SCHEMA = "sern.morph_domain.v1"
+CORE_ORDER = ("platform", "root", "memory", "knowledge", "ui", "audio", "personality", "modular", "cloud")
 CORE_FIELDS = {
     "platform": {"schema", "runtime", "storage", "clock", "life_schedule", "host_capabilities"},
     "root": {"schema", "identity", "lineage_capsule", "lineage_capsule_digest", "authority", "transaction"},
@@ -23,18 +25,11 @@ CORE_FIELDS = {
     "cloud": {"schema", "transfer", "custody", "reconciliation", "sern_capsule"},
 }
 CORE_SCHEMAS = {core: f"serein.morph-engine.{core}.v1" for core in CORE_ORDER}
-IDENTITY_FIELDS = {
-    "morph_id", "parentage", "founder_ancestry",
-    "device_birth_lineage", "generation",
-}
+IDENTITY_FIELDS = {"morph_id", "parentage", "founder_ancestry", "device_birth_lineage", "generation"}
 IMMUTABLE_ROOT_PATHS = (
-    "root.identity.morph_id",
-    "root.identity.parentage",
-    "root.identity.founder_ancestry",
-    "root.identity.device_birth_lineage",
-    "root.identity.generation",
-    "root.lineage_capsule",
-    "root.lineage_capsule_digest",
+    "root.identity.morph_id", "root.identity.parentage", "root.identity.founder_ancestry",
+    "root.identity.device_birth_lineage", "root.identity.generation",
+    "root.lineage_capsule", "root.lineage_capsule_digest",
 )
 _HEX_64 = re.compile(r"^[0-9a-f]{64}$")
 
@@ -52,7 +47,11 @@ def _exact_object(value: Any, fields: set[str], label: str) -> dict[str, Any]:
 
 
 def _json_tree(value: Any, label: str) -> None:
-    if value is None or type(value) in {str, int, float, bool}:
+    if value is None or type(value) in {str, int, bool}:
+        return
+    if type(value) is float:
+        if not math.isfinite(value):
+            raise CoreContractError("INVALID_CORE_STATE", f"{label} contains a non-finite number")
         return
     if isinstance(value, list):
         for index, item in enumerate(value):
@@ -65,22 +64,34 @@ def _json_tree(value: Any, label: str) -> None:
     raise CoreContractError("INVALID_CORE_STATE", f"{label} is not strict JSON")
 
 
+def _canonical_bytes(value: Any) -> bytes:
+    try:
+        return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")
+    except (TypeError, ValueError) as err:
+        raise CoreContractError("INVALID_CORE_STATE", "value is not canonical JSON") from err
+
+
+def _strict_equal(left: Any, right: Any) -> bool:
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, dict):
+        return left.keys() == right.keys() and all(_strict_equal(left[k], right[k]) for k in left)
+    if isinstance(left, list):
+        return len(left) == len(right) and all(_strict_equal(a, b) for a, b in zip(left, right))
+    return left == right
+
+
 def validate_engine_state(state: dict[str, Any]) -> dict[str, Any]:
     _exact_object(state, {"schema", *CORE_ORDER}, "Morph Engine")
     if state["schema"] != ENGINE_SCHEMA:
         raise CoreContractError("INCOMPATIBLE_ENGINE", "Morph Engine schema is not admitted")
-    if "kernel" in state:
-        raise CoreContractError("KERNEL_PROHIBITED", "Morph Engine never carries a Kernel")
-
     for core in CORE_ORDER:
         record = _exact_object(state[core], CORE_FIELDS[core], f"{core} Core")
         if record["schema"] != CORE_SCHEMAS[core]:
             raise CoreContractError("INCOMPATIBLE_CORE", f"{core} Core schema is not admitted")
         _json_tree(record, core)
-
     identity = _exact_object(state["root"]["identity"], IDENTITY_FIELDS, "Root identity")
-    morph_id = identity["morph_id"]
-    if not isinstance(morph_id, str) or not morph_id:
+    if not isinstance(identity["morph_id"], str) or not identity["morph_id"]:
         raise CoreContractError("INVALID_IDENTITY", "morph_id is required")
     if type(identity["generation"]) is not int or identity["generation"] < 0:
         raise CoreContractError("INVALID_IDENTITY", "generation must be a nonnegative integer")
@@ -90,8 +101,9 @@ def validate_engine_state(state: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(identity["device_birth_lineage"], str) or not identity["device_birth_lineage"]:
         raise CoreContractError("INVALID_IDENTITY", "device birth lineage is required")
     digest = state["root"]["lineage_capsule_digest"]
-    if not isinstance(digest, str) or _HEX_64.fullmatch(digest) is None:
-        raise CoreContractError("INVALID_LINEAGE_DIGEST", "lineage capsule digest must be lowercase SHA-256")
+    expected = hashlib.sha256(_canonical_bytes(state["root"]["lineage_capsule"])).hexdigest()
+    if not isinstance(digest, str) or _HEX_64.fullmatch(digest) is None or digest != expected:
+        raise CoreContractError("INVALID_LINEAGE_DIGEST", "lineage capsule digest does not bind the canonical capsule")
     if not isinstance(state["memory"]["chronicle"], list):
         raise CoreContractError("INVALID_MEMORY", "Chronicle must be an append-only list")
     for field in ("family", "relationships", "experience"):
@@ -109,8 +121,8 @@ def _path_value(state: dict[str, Any], path: str) -> Any:
 
 def _assert_monotonic_tree(previous: Any, candidate: Any, path: str) -> None:
     if type(previous) in {int, float}:
-        if type(candidate) not in {int, float} or candidate < previous:
-            raise CoreContractError("MEMORY_REGRESSION", f"{path} may not decrease")
+        if type(candidate) is not type(previous) or candidate < previous:
+            raise CoreContractError("MEMORY_REGRESSION", f"{path} may not decrease or change type")
         return
     if isinstance(previous, dict):
         if not isinstance(candidate, dict):
@@ -121,31 +133,34 @@ def _assert_monotonic_tree(previous: Any, candidate: Any, path: str) -> None:
             _assert_monotonic_tree(value, candidate[key], f"{path}.{key}")
         return
     if isinstance(previous, list):
-        if not isinstance(candidate, list) or candidate[:len(previous)] != previous:
-            raise CoreContractError("MEMORY_REGRESSION", f"{path} must preserve its prefix")
+        if not isinstance(candidate, list) or len(candidate) < len(previous) or not all(
+            _strict_equal(a, b) for a, b in zip(previous, candidate[:len(previous)])
+        ):
+            raise CoreContractError("MEMORY_REGRESSION", f"{path} must preserve its type-exact prefix")
         return
-    if candidate != previous:
+    if not _strict_equal(candidate, previous):
         raise CoreContractError("MEMORY_REGRESSION", f"{path} may not rewrite established truth")
 
 
-def validate_successor(
-    previous: dict[str, Any],
-    candidate: dict[str, Any],
-    allowed_cores: set[str],
-) -> dict[str, Any]:
-    old = validate_engine_state(previous)
-    new = validate_engine_state(candidate)
+def validate_successor(previous: dict[str, Any], candidate: dict[str, Any], allowed_cores: set[str]) -> dict[str, Any]:
+    old, new = validate_engine_state(previous), validate_engine_state(candidate)
     if not allowed_cores.issubset(set(CORE_ORDER)):
         raise CoreContractError("UNKNOWN_CORE", "allowed Core set is invalid")
-    changed = {core for core in CORE_ORDER if old[core] != new[core]}
+    changed = {core for core in CORE_ORDER if not _strict_equal(old[core], new[core])}
     if not changed.issubset(allowed_cores):
         raise CoreContractError("CROSS_CORE_WRITE", "write escaped its admitted Core boundary")
     for path in IMMUTABLE_ROOT_PATHS:
-        if _path_value(old, path) != _path_value(new, path):
+        if not _strict_equal(_path_value(old, path), _path_value(new, path)):
             raise CoreContractError("IMMUTABLE_ROOT_CHANGED", f"{path} cannot be rewritten")
-    if old["memory"] != new["memory"]:
-        _assert_monotonic_tree(old["memory"]["chronicle"], new["memory"]["chronicle"], "memory.chronicle")
-        _assert_monotonic_tree(old["memory"]["family"], new["memory"]["family"], "memory.family")
-        _assert_monotonic_tree(old["memory"]["relationships"], new["memory"]["relationships"], "memory.relationships")
-        _assert_monotonic_tree(old["memory"]["experience"], new["memory"]["experience"], "memory.experience")
+    if not _strict_equal(old["memory"], new["memory"]):
+        for field in ("chronicle", "family", "relationships", "experience"):
+            _assert_monotonic_tree(old["memory"][field], new["memory"][field], f"memory.{field}")
     return new
+
+
+def assert_schema_boundary(value: dict[str, Any], expected_schema: str) -> None:
+    """Reject silent substitution among portable, engine, and SERN contracts."""
+    admitted = {ENGINE_SCHEMA, PORTABLE_SCHEMA, SERN_SCHEMA}
+    actual = value.get("schema") if isinstance(value, dict) else None
+    if expected_schema not in admitted or actual != expected_schema:
+        raise CoreContractError("SCHEMA_BOUNDARY_VIOLATION", "an explicit schema adapter is required")
