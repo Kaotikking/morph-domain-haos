@@ -40,6 +40,8 @@ duplicate actions. The portable Morph snapshot, internal Morph Engine state, and
 SERN control envelope are distinct schemas; crossing a boundary requires an
 explicit adapter and never silent substitution.
 
+Version 1.11 makes elapsed-life processing event-driven: the periodic engine scheduler is the sole owner of life advancement and environment sampling. Dashboard/API reads are side-effect-free, and transfer reads create durable writes only when expiry reconciliation actually changes state.
+
 See [DNAv1 lineage and lifecycle](docs/DNA-V1-LIFECYCLE.md),
 [Morph Engine nine-Core architecture](docs/MORPH-ENGINE-NINE-CORE.md), and
 [Repair reflex ledger](docs/REPAIR-REFLEX-LEDGER-V1.md).
