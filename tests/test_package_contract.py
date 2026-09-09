@@ -78,10 +78,12 @@ def test_dnav1_lineage_lifecycle_contract_is_packaged():
 
 def test_morph_engine_nine_core_and_repair_reflex_are_packaged():
     engine = (COMPONENT / "_vendor/morph_engine/world_engine.py").read_text()
+    core_contract = (COMPONENT / "_vendor/morph_engine/core_contract.py").read_text()
     reflex = (COMPONENT / "_vendor/morph_sdk/repair_reflex.py").read_text()
     contract = (ROOT / "docs/MORPH-ENGINE-NINE-CORE.md").read_text()
     assert 'ENGINE_SCHEMA' in engine
-    assert '"platform", "root", "memory", "knowledge", "ui", "audio", "personality", "modular", "cloud"' in engine
+    assert '"platform", "root", "memory", "knowledge", "ui"' in core_contract
+    assert '"audio", "personality", "modular", "cloud"' in core_contract
     assert 'world_contract": "MorphDomain"' in engine
     assert 'LEDGER_SCHEMA = "serein.morph-repair-reflex-ledger.v1"' in reflex
     assert "This change does not rename or replace it" in contract
