@@ -10,7 +10,7 @@ def test_hacs_layout_and_manifest():
     hacs = json.loads((ROOT / "hacs.json").read_text())
     assert manifest["domain"] == "morph_domain"
     assert manifest["config_flow"] is True
-    assert manifest["version"] == "1.7.0"
+    assert manifest["version"] == "1.8.0"
     assert manifest["documentation"].startswith("https://github.com/")
     assert manifest["issue_tracker"].startswith("https://github.com/")
     assert manifest["codeowners"]
@@ -74,3 +74,14 @@ def test_dnav1_lineage_lifecycle_contract_is_packaged():
     assert 'LIFECYCLE = ("SEALED", "HATCHING", "JUVENILE", "MATURE", "AWAKENED")' in source
     assert 'SOCIAL_STATES = ("UNFAMILIAR", "AWARE", "FAMILIAR", "BONDED", "RESONANT")' in source
     assert "Installation alone has no Morph-state effect" in contract
+
+
+def test_morph_engine_nine_core_and_repair_reflex_are_packaged():
+    engine = (COMPONENT / "_vendor/morph_engine/world_engine.py").read_text()
+    reflex = (COMPONENT / "_vendor/morph_sdk/repair_reflex.py").read_text()
+    contract = (ROOT / "docs/MORPH-ENGINE-NINE-CORE.md").read_text()
+    assert 'ENGINE_SCHEMA = "serein.morph-engine.v1"' in engine
+    assert '"platform", "root", "memory", "knowledge", "ui", "audio", "personality", "modular", "cloud"' in engine
+    assert 'world_contract": "MorphDomain"' in engine
+    assert 'LEDGER_SCHEMA = "serein.morph-repair-reflex-ledger.v1"' in reflex
+    assert "This change does not rename or replace it" in contract
