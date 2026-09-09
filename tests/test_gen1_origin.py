@@ -101,13 +101,32 @@ def test_second_starter_and_existing_morph_fail_closed():
 def test_private_serein_founders_do_not_block_public_starter():
     ledger = empty_ledger()
     for founder in ("EMBER", "BREEZE", "SENTINEL", "PULSE"):
-        ledger.data["morphs"][founder.lower()] = {"morph_id": founder.lower(), "founder_id": founder}
+        ledger.data["morphs"][founder.lower()] = {
+            "morph_id": founder.lower(), "founder_id": founder,
+            "device_birth_lineage": f"serein-lineage:v1:{founder.lower()}",
+        }
+    ledger.data["morphs"]["dustdevil"] = {
+        "morph_id": "dustdevil", "founder_id": "DESCENDANT",
+        "device_birth_lineage": "nursery-lineage:dustdevil",
+        "source_frame": "haos-nursery",
+    }
     result = origin.create_starter(
         ledger, request(starter="L1-03"), datetime(2026, 9, 9, 22, 0, tzinfo=UTC)
     )
     assert result["state"] == "STARTER_EGG_CREATED"
     assert result["private_founders_changed"] is False
-    assert len(ledger.data["morphs"]) == 5
+    assert len(ledger.data["morphs"]) == 6
+
+
+def test_unattributed_descendant_cannot_bypass_import_suppression():
+    ledger = empty_ledger()
+    ledger.data["morphs"]["unknown"] = {
+        "morph_id": "unknown", "founder_id": "DESCENDANT",
+        "device_birth_lineage": "external-lineage:unknown", "source_frame": "unknown",
+    }
+    with pytest.raises(transfer.TransferError) as denied:
+        origin.create_starter(ledger, request(), datetime(2026, 9, 9, 22, 0, tzinfo=UTC))
+    assert denied.value.code == "IMPORT_SUPPRESSES_STARTER"
 
 
 def test_status_exposes_options_without_creating_more_morphs():

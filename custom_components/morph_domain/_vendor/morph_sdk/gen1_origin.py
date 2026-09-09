@@ -45,6 +45,15 @@ def _starter_operations(ledger: MorphTransferLedger) -> list[dict[str, Any]]:
             if op.get("operation_kind") == "GEN1_STARTER_BIRTH"]
 
 
+def _is_private_serein_resident(morph: dict[str, Any]) -> bool:
+    founder = str(morph.get("founder_id", "")).upper()
+    if founder in PRIVATE_SEREIN_FOUNDERS:
+        return str(morph.get("device_birth_lineage", "")).startswith("serein-lineage:v1:")
+    return (founder == "DESCENDANT"
+            and morph.get("source_frame") == "haos-nursery"
+            and str(morph.get("device_birth_lineage", "")).startswith("nursery-lineage:"))
+
+
 def starter_status(ledger: MorphTransferLedger) -> dict[str, Any]:
     claims = _starter_operations(ledger)
     if len(claims) > 1:
@@ -138,7 +147,7 @@ def create_starter(ledger: MorphTransferLedger, request: dict[str, Any], now: da
     if claims:
         raise TransferError("STARTER_ALREADY_CLAIMED", "this installation already has a Legendary starter")
     public_or_imported = [morph for morph in ledger.data["morphs"].values()
-                          if str(morph.get("founder_id", "")).upper() not in PRIVATE_SEREIN_FOUNDERS]
+                          if not _is_private_serein_resident(morph)]
     if public_or_imported:
         raise TransferError("IMPORT_SUPPRESSES_STARTER", "an imported or existing Morph suppresses starter creation")
 
