@@ -50,6 +50,8 @@ class MorphHabitatView(HomeAssistantView):
     requires_auth = True
 
     async def post(self, request: Any, action: str) -> Any:
+        if action not in {"list", "status", "history"} and not request["hass_user"].is_admin:
+            return self.json({"ok": False, "error": {"code": "ADMIN_REQUIRED", "message": "administrator authority is required"}}, status_code=403)
         manager: MorphTransferManager = request.app["hass"].data[DATA_KEY]
         try:
             result = await manager.handle_habitat(action, await request.json())
