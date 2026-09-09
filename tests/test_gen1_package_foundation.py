@@ -102,6 +102,8 @@ def test_all_public_schemas_are_valid_json_and_fail_closed():
         assert schema["additionalProperties"] is False
         assert schema["properties"]["kind"]["const"] == kind.upper()
         assert schema["properties"]["fixtures"]["minItems"] == 1
+        payload = schema["properties"]["payload"]
+        assert set(payload["properties"]) == set(payload["required"])
 
 
 def test_all_gen1_builtins_are_admitted_and_branch_each_element():
