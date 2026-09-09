@@ -42,6 +42,8 @@ explicit adapter and never silent substitution.
 
 Version 1.11 makes elapsed-life processing event-driven: the periodic engine scheduler is the sole owner of life advancement and environment sampling. Dashboard/API reads are side-effect-free, and transfer reads create durable writes only when expiry reconciliation actually changes state.
 
+Version 1.12 adds bounded, process-local Morph Engine observability: scheduler and API latency, evaluated/advanced Morph counts, storage write decisions, expiry reconciliation, roster size, and Chronicle event count. The dedicated HAOS health sensor exposes only aggregate operational data and never owns or mutates Morph truth.
+
 See [DNAv1 lineage and lifecycle](docs/DNA-V1-LIFECYCLE.md),
 [Morph Engine nine-Core architecture](docs/MORPH-ENGINE-NINE-CORE.md), and
 [Repair reflex ledger](docs/REPAIR-REFLEX-LEDGER-V1.md).
