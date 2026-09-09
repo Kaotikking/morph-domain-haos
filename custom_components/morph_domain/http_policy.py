@@ -22,3 +22,13 @@ def admin_authorized(surface: str, action: str, user: Any) -> bool:
     if not action_requires_admin(surface, action):
         return True
     return user is not None and getattr(user, "is_admin", False) is True
+
+
+def action_is_read(surface: str, action: str) -> bool:
+    """Recognize only exact admitted read actions."""
+    return action in _READ_ACTIONS.get(surface, frozenset())
+
+
+def durable_write_required(surface: str, action: str, maintenance_changed: bool) -> bool:
+    """Mutations always persist; reads persist only real maintenance changes."""
+    return not action_is_read(surface, action) or maintenance_changed
