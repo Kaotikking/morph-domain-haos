@@ -1,4 +1,6 @@
 from copy import deepcopy
+import hashlib
+import json
 from pathlib import Path
 import sys
 
@@ -14,7 +16,8 @@ from morph_engine.world_engine import (
 
 
 def state():
-    digest = "a" * 64
+    capsule = {"schema": "capsule-v1"}
+    digest = hashlib.sha256(json.dumps(capsule, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     return {
         "schema": "serein.morph-engine.v1",
         "platform": {
@@ -28,7 +31,7 @@ def state():
                 "morph_id": "morph:a", "parentage": [], "founder_ancestry": ["BREEZE"],
                 "device_birth_lineage": "frame:a", "generation": 0,
             },
-            "lineage_capsule": {"schema": "capsule-v1"},
+            "lineage_capsule": capsule,
             "lineage_capsule_digest": digest,
             "authority": {"owner": "HAOS"},
             "transaction": None,
@@ -114,7 +117,7 @@ def test_nested_root_identity_and_lineage_are_immutable(mutation):
     mutation(new)
     with pytest.raises(CoreContractError) as caught:
         validate_successor(old, new, "combination")
-    assert caught.value.code == "IMMUTABLE_ROOT_CHANGED"
+    assert caught.value.code in {"IMMUTABLE_ROOT_CHANGED", "INVALID_LINEAGE_DIGEST"}
 
 
 def test_memory_chronicle_may_append_and_counters_may_increase():
@@ -157,3 +160,27 @@ def test_memory_chronicle_cannot_be_reordered():
     with pytest.raises(CoreContractError) as caught:
         validate_successor(old, new, "life")
     assert caught.value.code == "MEMORY_REGRESSION"
+
+
+def test_nonfinite_and_bool_number_type_drift_fail_closed():
+    bad = state()
+    bad["knowledge"]["environment"]["temperature"] = float("nan")
+    with pytest.raises(CoreContractError) as caught:
+        validate_engine_state(bad)
+    assert caught.value.code == "INVALID_CORE_STATE"
+
+    old = state()
+    new = deepcopy(old)
+    old["memory"]["experience"]["growth"] = 1
+    new["memory"]["experience"]["growth"] = True
+    with pytest.raises(CoreContractError) as caught:
+        validate_successor(old, new, "life")
+    assert caught.value.code == "MEMORY_REGRESSION"
+
+
+def test_lineage_capsule_digest_is_recomputed():
+    bad = state()
+    bad["root"]["lineage_capsule"]["schema"] = "tampered"
+    with pytest.raises(CoreContractError) as caught:
+        validate_engine_state(bad)
+    assert caught.value.code == "INVALID_LINEAGE_DIGEST"

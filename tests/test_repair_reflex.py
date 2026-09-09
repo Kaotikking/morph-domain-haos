@@ -86,6 +86,14 @@ def test_effects_require_bound_rollback_and_complete_witness():
         authorize_effects(reflex, "a" * 64, ["successor-validation"])
     assert caught.value.code == "WITNESS_INCOMPLETE"
 
-    assert authorize_effects(
-        reflex, "a" * 64, reflex["acceptance_witness"]["required_checks"]
-    ) == ["regenerate-derived-presentation"]
+    checks = {
+        name: {"result": "PASS", "evidence_id": f"evidence:{name}", "predecessor_digest": "a" * 64}
+        for name in reflex["acceptance_witness"]["required_checks"]
+    }
+    assert authorize_effects(reflex, "a" * 64, checks) == ["regenerate-derived-presentation"]
+
+    tampered = deepcopy(checks)
+    tampered["digest-readback"]["predecessor_digest"] = "b" * 64
+    with pytest.raises(RepairReflexError) as caught:
+        authorize_effects(reflex, "a" * 64, tampered)
+    assert caught.value.code == "WITNESS_DIGEST_MISMATCH"

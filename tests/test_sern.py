@@ -41,6 +41,29 @@ class SernTests(unittest.TestCase):
         self.assertEqual(sern.validate_envelope(value).message_type, "OPEN_TRANSPORT")
 
 
+
+
+    def test_nonfinite_oversize_and_identity_drift_fail_closed(self):
+        value = packet()
+        value["cores"]["life"] = {"bad": float("inf")}
+        with self.assertRaises(sern.SernEnvelopeError):
+            sern.validate_envelope(value)
+
+        value = packet()
+        value["cores"]["memory"] = {"blob": "x" * sern.MAX_ENVELOPE_BYTES}
+        with self.assertRaisesRegex(sern.SernEnvelopeError, "exceeds"):
+            sern.validate_envelope(value)
+
+        value = packet()
+        value["cores"]["identity"] = {"morph_id": "other", "generation": 4}
+        with self.assertRaisesRegex(sern.SernEnvelopeError, "does not bind"):
+            sern.validate_envelope(value)
+
+    def test_snapshot_payload_is_prohibited(self):
+        value = packet()
+        value["cores"]["transport"] = {"payload": {"private": "state"}}
+        with self.assertRaisesRegex(sern.SernEnvelopeError, "never carry"):
+            sern.validate_envelope(value)
+
 if __name__ == "__main__":
     unittest.main()
-
