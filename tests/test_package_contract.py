@@ -10,7 +10,7 @@ def test_hacs_layout_and_manifest():
     hacs = json.loads((ROOT / "hacs.json").read_text())
     assert manifest["domain"] == "morph_domain"
     assert manifest["config_flow"] is True
-    assert manifest["version"] == "1.14.0"
+    assert manifest["version"] == "1.16.0"
     assert manifest["documentation"].startswith("https://github.com/")
     assert manifest["issue_tracker"].startswith("https://github.com/")
     assert manifest["codeowners"]
@@ -60,7 +60,9 @@ def test_morph_first_operator_panel_is_packaged():
     panel = (COMPONENT / "frontend/morph-domain-panel.js").read_text(encoding="utf-8")
     assert 'frontend_url_path=PANEL_PATH' in setup
     assert 'require_admin=True' in setup
-    assert 'hass.callApi("POST", "morph-domain/v1/habitat/list", {})' in panel
+    assert 'this._hass.callApi("POST","morph-domain/v1/habitat/list",{})' in panel
+    assert 'this._hass.callApi("POST","morph-domain/v1/habitat/starter-status",{})' in panel
+    assert 'data-starter=' in panel
     assert 'PLACES=["VOID","NURSERY","SEREIN_GARDENS","HORIZON","CODE_HAVEN"]' in panel
     assert 'class="locations"' in panel
     assert 'class="morph-stage"' in panel
@@ -104,3 +106,4 @@ def test_scheduler_awaits_tick_on_home_assistant_event_loop():
     assert "async def async_tick_habitats" in habitat
     assert "await hass.data[DATA_KEY].tick_habitats()" in habitat
     assert "lambda _: hass.async_create_task" not in habitat
+

@@ -50,6 +50,8 @@ Version 1.13 locks the Morph World presentation foundation: immutable Gen-1 bran
 
 Version 1.14 freezes the Gen-1 package grammar. Founder, Evolution, and Presentation packages are independently admitted; evolution is a catalyst-driven graph distinct from five-level expression; form reversion never erases mastery; and future Frame Armor, combined, and battle classes are reserved but inactive. Four Founder packages, sixteen elemental branch seeds, schema validation, constrained-frame fallback, and cross-platform truth fixtures prove that new content can be added without rewriting the resolver.
 
+Version 1.16 adds the fail-closed consumer-beta origin gate. A fresh installation receives one durable installation identity and may create exactly one parentless L1 Legendary egg in Nursery. Existing/imported Morphs suppress starter creation, exact retries are idempotent, changed replays fail closed, and the three unchosen public elemental lineages remain Horizon discoveries. Private Serein Founders are never created or modified by this path.
+
 See [DNAv1 lineage and lifecycle](docs/DNA-V1-LIFECYCLE.md),
 [Morph Engine nine-Core architecture](docs/MORPH-ENGINE-NINE-CORE.md), and
 [Repair reflex ledger](docs/REPAIR-REFLEX-LEDGER-V1.md), and
@@ -66,6 +68,8 @@ Copy `custom_components/morph_domain` into Home Assistant, restart, then add
 - `POST /api/morph-domain/v1/transfer/{action}`
 - `POST /api/morph-domain/v1/habitat/{action}`
 
+Consumer-beta origin actions are `starter-status` (read-only) and `starter-create` (administrator-only). The dashboard presents the four public elemental choices only while a clean installation is eligible. Creation is a real durable Morph transaction, not a fixture.
+
 Read operations require Home Assistant authentication. Mutation operations require a Home Assistant administrator. HTTP success alone never establishes
 ownership; transfer remains prepare, accept, commit, and reconciliation.
 
@@ -80,5 +84,6 @@ MorphDomain refuses to run beside an enabled legacy engine. Reconcile every
 Morph through the MorphDomain API before changing place or authority, and never
 enable both engines concurrently. Private Morph state remains for recovery or
 reinstall; uninstall never deletes it.
+
 
 

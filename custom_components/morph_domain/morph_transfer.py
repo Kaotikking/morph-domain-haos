@@ -6,6 +6,7 @@ import asyncio
 from copy import deepcopy
 from datetime import UTC, datetime
 import json
+import uuid
 from time import perf_counter
 from typing import Any
 
@@ -106,6 +107,7 @@ class MorphTransferManager:
             register_founder_axis,
             advance_founder_axis,
         )
+        from ._vendor.morph_sdk.gen1_origin import create_starter, starter_status
 
         async with self.lock:
             now = datetime.now(UTC)
@@ -121,6 +123,12 @@ class MorphTransferManager:
             if action == "list":
                 _exact(body, set(), "list request")
                 result = habitat_list(candidate, now)
+            elif action == "starter-status":
+                _exact(body, set(), "starter status request")
+                result = starter_status(candidate)
+            elif action == "starter-create":
+                result = create_starter(candidate, body, now)
+                changed = True
             elif action == "status":
                 _exact(body, {"morph_id"}, "habitat status request")
                 result = habitat_status(candidate, str(body["morph_id"]), now)
@@ -209,11 +217,18 @@ async def async_setup_morph_transfer(hass: HomeAssistant) -> None:
             data = deepcopy(legacy_data)
             await store.async_save(data)
     ledger = MorphTransferLedger(data or MorphTransferLedger.empty().data)
+    identity_created = False
+    if not ledger.data.get("installation_id"):
+        ledger.data["installation_id"] = uuid.uuid4().hex
+        identity_created = True
     if ledger.reconcile_expired(datetime.now(UTC)):
+        await store.async_save(ledger.data)
+    elif identity_created:
         await store.async_save(ledger.data)
     manager = MorphTransferManager(hass, ledger)
     manager.store = store
     hass.data[DATA_KEY] = manager
     hass.http.register_view(MorphTransferView)
+
 
 
