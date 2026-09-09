@@ -167,17 +167,26 @@ def classify(signature: str, ledger: dict[str, Any] | None = None) -> dict[str, 
 def authorize_effects(
     reflex: dict[str, Any],
     predecessor_digest: str | None,
-    observed_checks: list[str],
+    observed_checks: dict[str, dict[str, Any]],
 ) -> list[str]:
-    """Return effects only after rollback and every acceptance precondition are executable."""
+    """Authorize only attributable PASS evidence bound to the rollback digest."""
     record = validate_reflex(reflex)
-    if not isinstance(observed_checks, list) or not all(isinstance(item, str) for item in observed_checks):
-        raise RepairReflexError("INVALID_WITNESS", "observed checks must be a string list")
     rollback = record["rollback"]
     if rollback["predecessor_digest_required"]:
         if not isinstance(predecessor_digest, str) or _HEX_64.fullmatch(predecessor_digest) is None:
             raise RepairReflexError("ROLLBACK_NOT_BOUND", "valid predecessor digest is required before effects")
-    missing = set(record["acceptance_witness"]["required_checks"]) - set(observed_checks)
-    if missing:
-        raise RepairReflexError("WITNESS_INCOMPLETE", "required acceptance checks are missing")
+        if rollback["strategy"] != "restore-predecessor-digest":
+            raise RepairReflexError("ROLLBACK_NOT_EXECUTABLE", "mutating effects require digest restoration")
+    required = record["acceptance_witness"]["required_checks"]
+    if not isinstance(observed_checks, dict) or set(observed_checks) != set(required):
+        raise RepairReflexError("WITNESS_INCOMPLETE", "exact required acceptance evidence is missing")
+    for name in required:
+        evidence = observed_checks[name]
+        if not isinstance(evidence, dict) or set(evidence) != {"result", "evidence_id", "predecessor_digest"}:
+            raise RepairReflexError("INVALID_WITNESS", "witness evidence fields are not exact")
+        if evidence["result"] != "PASS" or not isinstance(evidence["evidence_id"], str) or not evidence["evidence_id"]:
+            raise RepairReflexError("WITNESS_FAILED", "acceptance evidence is not attributable PASS")
+        expected = predecessor_digest if rollback["predecessor_digest_required"] else None
+        if evidence["predecessor_digest"] != expected:
+            raise RepairReflexError("WITNESS_DIGEST_MISMATCH", "acceptance evidence is not bound to rollback")
     return list(record["permitted_effects"])
