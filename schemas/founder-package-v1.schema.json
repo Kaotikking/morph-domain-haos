@@ -49,6 +49,11 @@
         "palette",
         "catalysts"
       ],
+      "properties": {
+        "element_id": {}, "founder_id": {}, "public_lineage_id": {}, "starter_id": {},
+        "name": {}, "primary": {}, "recessive": {}, "signature": {},
+        "word_pools": {}, "palette": {}, "catalysts": {}
+      },
       "additionalProperties": false
     },
     "fallback": {
@@ -61,5 +66,4 @@
     }
   }
 }
-
 
