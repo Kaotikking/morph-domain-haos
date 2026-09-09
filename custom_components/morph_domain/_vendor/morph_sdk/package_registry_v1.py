@@ -6,20 +6,40 @@ from hashlib import sha256
 import json
 import re
 
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = "1.1.0"
 ELEMENTS = {"01": "FIRE", "02": "AIR", "03": "EARTH", "04": "WATER"}
 PACKAGE_KINDS = ("FOUNDER", "EVOLUTION", "PRESENTATION")
 EVOLUTION_CLASSES = ("NATURAL", "CONTEXT", "RESONANCE", "CULMINATION")
 RESERVED_EVOLUTION_CLASSES = ("FRAME_ARMOR", "COMBINED", "BATTLE")
 EVIDENCE_KEYS = ("CARE", "RELATIONSHIP", "WEATHER", "LOCATION", "FRAME", "ACTIVITY", "CAPABILITY", "EVENT", "ENERGY")
 MORPH_CORES = ("platform", "root", "memory", "knowledge", "ui", "audio", "personality", "modular", "cloud")
+MORPH_CORE_LORE_FACETS = {
+    "platform": "life",
+    "root": "authority",
+    "memory": "memory",
+    "knowledge": "lineage",
+    "ui": "presentation",
+    "audio": "expression",
+    "personality": "relationship",
+    "modular": "capability",
+    "cloud": "identity",
+}
+SEREIN_RUNTIME_DEPENDENCY = "OPTIONAL_ENRICHMENT"
+LOCAL_FIRST_CAPABILITIES = (
+    "identity", "life", "care", "social", "expression", "movement",
+    "code_haven", "chronicle", "presentation",
+)
 PACKAGE_ID = re.compile(r"^PKG-(FOUNDER|EVOLUTION|PRESENTATION)-[A-Z0-9_.-]+@\d+\.\d+\.\d+$")
-FORM_ID = re.compile(r"^FORM-(?:01|02|03|04)(?:\.(?:01|02|03|04))*-[A-Z0-9_.-]+$")
+FORM_ID = re.compile(r"^FORM-(\d{2})(?:\.(\d{2}))?-[A-Z0-9_.-]+$")
 
 
 def canonical_digest(value: object) -> str:
     encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return sha256(encoded.encode()).hexdigest()
+
+
+def package_content_digest(package: dict[str, object]) -> str:
+    return canonical_digest({key: value for key, value in package.items() if key != "content_digest"})
 
 
 def validate_evidence(evidence: dict[str, int]) -> dict[str, int]:
@@ -31,7 +51,7 @@ def validate_evidence(evidence: dict[str, int]) -> dict[str, int]:
 
 
 def validate_package(package: dict[str, object]) -> dict[str, object]:
-    required = {"schema", "package_id", "kind", "compatibility", "payload", "fallback", "fixtures"}
+    required = {"schema", "package_id", "kind", "compatibility", "payload", "fallback", "fixtures", "content_digest"}
     if set(package) != required or package["schema"] != "serein.morph-package.v1":
         raise ValueError("invalid package envelope")
     if package["kind"] not in PACKAGE_KINDS or not PACKAGE_ID.fullmatch(str(package["package_id"])):
@@ -40,6 +60,8 @@ def validate_package(package: dict[str, object]) -> dict[str, object]:
         raise ValueError("incompatible engine major")
     if not package["fallback"] or not isinstance(package["fixtures"], list):
         raise ValueError("fallback and fixtures are required")
+    if package["content_digest"] != package_content_digest(package):
+        raise ValueError("package content digest mismatch")
     payload = package["payload"]
     if not isinstance(payload, dict):
         raise ValueError("payload must be an object")
@@ -62,8 +84,11 @@ def _validate_founder(payload: dict[str, object]) -> None:
 
 def _validate_evolution(payload: dict[str, object]) -> None:
     required = {"form_id", "class", "lineages", "evidence", "catalysts", "capabilities", "stability", "reversion", "presentation_id", "exclusions"}
-    if set(payload) != required or not FORM_ID.fullmatch(str(payload["form_id"])):
+    match = FORM_ID.fullmatch(str(payload["form_id"]))
+    if set(payload) != required or not match:
         raise ValueError("invalid Evolution template")
+    if any(element not in ELEMENTS for element in match.groups() if element is not None):
+        raise ValueError("evolution form uses an unregistered element")
     if payload["class"] not in EVOLUTION_CLASSES:
         raise ValueError("inactive or unknown evolution class")
     validate_evidence(payload["evidence"])
@@ -87,7 +112,26 @@ def admit_packages(packages: list[dict[str, object]]) -> dict[str, dict[str, obj
         if package_id in admitted:
             raise ValueError("duplicate package")
         admitted[package_id] = valid
+    presentations = {
+        str(package["payload"]["presentation_id"])
+        for package in admitted.values() if package["kind"] == "PRESENTATION"
+    }
+    if presentations:
+        for package in admitted.values():
+            if package["kind"] == "EVOLUTION" and package["payload"]["presentation_id"] not in presentations:
+                raise ValueError("evolution references an unadmitted presentation")
     return admitted
+
+
+def validate_transition_envelope(value: dict[str, object]) -> dict[str, object]:
+    fields = {"who", "what", "when", "where", "how", "authority_ref", "predecessor_digest", "rollback", "receipt_id"}
+    if not isinstance(value, dict) or set(value) != fields:
+        raise ValueError("transition envelope fields are not exact")
+    if any(not isinstance(value[key], str) or not value[key] for key in fields):
+        raise ValueError("transition envelope values are required")
+    if len(str(value["predecessor_digest"])) != 64 or any(c not in "0123456789abcdef" for c in str(value["predecessor_digest"])):
+        raise ValueError("predecessor digest is invalid")
+    return dict(value)
 
 
 def eligible_forms(*, lineage_ids: set[str], evidence: dict[str, int], catalysts: set[str],
