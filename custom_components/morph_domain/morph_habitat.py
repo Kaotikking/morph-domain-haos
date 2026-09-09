@@ -11,6 +11,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.event import async_track_time_interval
 
 from .morph_transfer import DATA_KEY, MorphTransferManager, TransferError
+from .http_policy import admin_authorized
 from .sern import SernEnvelopeError, validate_envelope
 from ._vendor.morph_engine.habitat import *
 
@@ -50,7 +51,7 @@ class MorphHabitatView(HomeAssistantView):
     requires_auth = True
 
     async def post(self, request: Any, action: str) -> Any:
-        if action not in {"list", "status", "history"} and not request["hass_user"].is_admin:
+        if not admin_authorized("habitat", action, request.get("hass_user")):
             return self.json({"ok": False, "error": {"code": "ADMIN_REQUIRED", "message": "administrator authority is required"}}, status_code=403)
         manager: MorphTransferManager = request.app["hass"].data[DATA_KEY]
         try:
