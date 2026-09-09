@@ -38,10 +38,18 @@ class ElementalExpressionTests(unittest.TestCase):
         self.assertIsNone(e.resolve_compound(["AIR", "WATER"], 3))
         self.assertEqual(e.resolve_compound(["AIR", "WATER"], 4), "STORM")
 
-    def test_unknown_pairing_fails_closed(self):
-        with self.assertRaises(e.ElementalExpressionError) as raised:
-            e.resolve_compound(["FIRE", "EARTH"], 4)
-        self.assertEqual(raised.exception.code, "UNADMITTED_COMPOUND")
+    def test_all_six_unordered_primitive_pairs_are_admitted(self):
+        expected = {
+            frozenset(("FIRE", "AIR")): "PLASMA",
+            frozenset(("FIRE", "EARTH")): "MAGMA",
+            frozenset(("FIRE", "WATER")): "STEAM",
+            frozenset(("AIR", "EARTH")): "DUST",
+            frozenset(("AIR", "WATER")): "STORM",
+            frozenset(("EARTH", "WATER")): "VERDURE",
+        }
+        self.assertEqual(e.COMPOUNDS, expected)
+        for pair, family in expected.items():
+            self.assertEqual(e.resolve_compound(list(pair), 4), family)
 
     def test_lineage_and_expression_cannot_regress(self):
         parents, old = sample()
@@ -54,3 +62,4 @@ class ElementalExpressionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
