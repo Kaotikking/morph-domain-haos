@@ -1,9 +1,16 @@
 """Vendored Serein Morph Engine for HACS installation."""
 
-from .world_engine import (
+from .core_contract import (
+    CORE_FIELDS,
     CORE_ORDER,
-    ENGINE_FACETS,
+    CORE_SCHEMAS,
     ENGINE_SCHEMA,
+    IDENTITY_FIELDS,
+    IMMUTABLE_ROOT_PATHS,
+    CoreContractError,
+)
+from .world_engine import (
+    ENGINE_FACETS,
     WORLD_PLACES,
     describe_engine,
     project_for_frame,
@@ -13,7 +20,9 @@ from .world_engine import (
 )
 
 __all__ = [
-    "CORE_ORDER", "ENGINE_FACETS", "ENGINE_SCHEMA", "WORLD_PLACES",
-    "describe_engine", "project_for_frame", "route_facet",
-    "validate_engine_state", "validate_successor",
+    "CORE_FIELDS", "CORE_ORDER", "CORE_SCHEMAS", "ENGINE_FACETS",
+    "ENGINE_SCHEMA", "IDENTITY_FIELDS", "IMMUTABLE_ROOT_PATHS",
+    "WORLD_PLACES", "CoreContractError", "describe_engine",
+    "project_for_frame", "route_facet", "validate_engine_state",
+    "validate_successor",
 ]
