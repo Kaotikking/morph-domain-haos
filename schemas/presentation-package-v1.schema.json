@@ -49,6 +49,11 @@
         "accessibility",
         "frame_profiles"
       ],
+      "properties": {
+        "presentation_id": {}, "forms": {}, "capability_tiers": {}, "silhouette": {},
+        "palette": {}, "effects": {}, "animations": {}, "voice": {},
+        "localization": {}, "accessibility": {}, "frame_profiles": {}
+      },
       "additionalProperties": false
     },
     "fallback": {
@@ -61,5 +66,4 @@
     }
   }
 }
-
 
