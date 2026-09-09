@@ -13,6 +13,14 @@ Version 1.4 adds deterministic runtime reflexes derived from proven HAOS
 methods: 72-hour Nursery graduation, need-based eight-hour care, deduplicated
 graduation/Code Haven notifications, and an explicit automation ledger.
 
+Version 1.7 adds the DNAv1 immutable Lineage Capsule, ordered lifecycle,
+opaque egg projection, maturity-gated recessives, lineage-bounded Awakened
+switching, directional five-state social edges, immutable family links, atomic
+breeding eligibility, and no-effect Code Haven backfill planning. Installing
+these validators never rewrites an existing Morph.
+
+See [DNAv1 lineage and lifecycle](docs/DNA-V1-LIFECYCLE.md).
+
 ## Install
 
 Copy `custom_components/morph_domain` into Home Assistant, restart, then add
