@@ -10,7 +10,7 @@ def test_hacs_layout_and_manifest():
     hacs = json.loads((ROOT / "hacs.json").read_text())
     assert manifest["domain"] == "morph_domain"
     assert manifest["config_flow"] is True
-    assert manifest["version"] == "1.10.1"
+    assert manifest["version"] == "1.11.0"
     assert manifest["documentation"].startswith("https://github.com/")
     assert manifest["issue_tracker"].startswith("https://github.com/")
     assert manifest["codeowners"]
@@ -88,3 +88,12 @@ def test_morph_engine_nine_core_and_repair_reflex_are_packaged():
     assert 'LEDGER_SCHEMA = "serein.morph-repair-reflex-ledger.v1"' in reflex
     assert "MorphDomain remains the five-place world" in contract
     assert "does not\nrename, replace, or fork MorphDomain" in contract
+
+
+def test_dashboard_reads_do_not_own_life_advancement_or_unconditional_writes():
+    adapter = (COMPONENT / "morph_transfer.py").read_text()
+    policy = (COMPONENT / "http_policy.py").read_text()
+    assert 'if not action_is_read("habitat", action):' in adapter
+    assert 'durable_write_required("transfer", action, maintenance_changed)' in adapter
+    assert "The periodic scheduler is the only owner of elapsed-life advancement." in adapter
+    assert "reads persist only real maintenance changes" in policy
