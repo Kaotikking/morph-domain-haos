@@ -3,7 +3,7 @@ from pathlib import Path
 import sys
 import unittest
 
-MODULE = Path(__file__).with_name("sern.py")
+MODULE = Path(__file__).parents[1] / "custom_components" / "morph_domain" / "sern.py"
 SPEC = importlib.util.spec_from_file_location("morph_sern", MODULE)
 sern = importlib.util.module_from_spec(SPEC)
 assert SPEC and SPEC.loader
