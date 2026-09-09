@@ -5,7 +5,14 @@ from copy import deepcopy
 EXPRESSION_SCHEMA = "morph-domain.elemental-expression.v1"
 PRIMITIVES = {"AIR", "EARTH", "FIRE", "WATER"}
 LEVELS = {"LATENT": 1, "AWAKENED": 2, "BLENDED": 3, "COMPOUND": 4, "HARMONIC": 5}
-COMPOUNDS = {frozenset(("AIR", "WATER")): "STORM"}
+COMPOUNDS = {
+    frozenset(("FIRE", "AIR")): "PLASMA",
+    frozenset(("FIRE", "EARTH")): "MAGMA",
+    frozenset(("FIRE", "WATER")): "STEAM",
+    frozenset(("AIR", "EARTH")): "DUST",
+    frozenset(("AIR", "WATER")): "STORM",
+    frozenset(("EARTH", "WATER")): "VERDURE",
+}
 
 
 class ElementalExpressionError(ValueError):
@@ -76,4 +83,17 @@ def verify_expression_successor(previous, candidate, *, generation, parent_ids):
         raise ElementalExpressionError("LINEAGE_REWRITE", "elemental lineage changed")
     if new["expression_level"] < old["expression_level"]:
         raise ElementalExpressionError("EXPRESSION_REGRESSION", "earned expression level regressed")
+    return deepcopy(new)
+
+
+def authorize_expression_successor(previous, candidate, *, generation, parent_ids, care_level, social_level):
+    """Authorize earned mastery; weather/location/frame selectors never substitute for care."""
+    old = validate_expression(previous, generation=generation, parent_ids=parent_ids)
+    new = verify_expression_successor(previous, candidate, generation=generation, parent_ids=parent_ids)
+    for value in (care_level, social_level):
+        if type(value) is not int or not 0 <= value <= 5:
+            raise ElementalExpressionError("INVALID_MASTERY_EVIDENCE", "care and social levels must be 0..5")
+    if new["expression_level"] > old["expression_level"] and min(care_level, social_level) < new["expression_level"]:
+        raise ElementalExpressionError("MASTERY_NOT_EARNED", "context cannot grant permanent expression mastery")
+    return deepcopy(new)
 
