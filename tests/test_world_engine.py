@@ -133,6 +133,8 @@ def test_memory_chronicle_may_append_and_counters_may_increase():
 ])
 def test_memory_truth_cannot_be_erased_reordered_or_decreased(mutation):
     old = state()
+    if "reverse" in repr(mutation):
+        old["memory"]["chronicle"].append({"event_id": "second"})
     new = deepcopy(old)
     mutation(new)
     with pytest.raises(CoreContractError) as caught:
