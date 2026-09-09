@@ -37,6 +37,34 @@ rename, replace, or fork MorphDomain.
 Every Core carries its own exact v1 schema and exact top-level fields. Unknown,
 missing, extra, or non-JSON state fails closed.
 
+## Nine-Core lore projection
+
+The engine Cores and the Morph's nine visible truth facets are the same
+nine-part lore seen from two sides; neither list is renamed or expanded:
+
+| Engine Core | Morph truth facet |
+| --- | --- |
+| Platform | Life |
+| Root | Authority |
+| Memory | Memory |
+| Knowledge | Lineage |
+| UI | Presentation |
+| Audio | Expression |
+| Personality | Relationship |
+| Modular | Capability |
+| Cloud | Identity |
+
+This mapping is explanatory and deterministic. It does not transfer write
+authority between Cores. The Core contracts remain the enforcement boundary.
+
+## Independent cognition floor
+
+MorphDomain must remain alive without Serein. Its deterministic Morph Engine
+continues identity, life clock, care, social state, expression, movement,
+Code Haven isolation/repair, Chronicle, and presentation locally. Serein may
+add richer cognition and conversation but is never required for those truths.
+Loss of Serein therefore degrades enrichment, not Morph existence.
+
 ## Five cooperating facets
 
 - **Life:** Platform, Memory, Personality.
@@ -89,3 +117,4 @@ foundation. CPU SIMD, multicore CPU, iGPU, discrete GPU, ARM GPU, NPU/tensor,
 and hardware codecs will be admitted per function. Hardware may enrich
 presentation and perception but can never alter identity, DNA, lineage, life,
 Memory, custody, or authority. Losing acceleration must fall back to BASE.
+
