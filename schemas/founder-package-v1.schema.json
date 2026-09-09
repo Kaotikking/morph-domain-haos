@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Kaotikking/morph-domain-haos/schemas/founder-package-v1.schema.json",
+  "title": "Serein Morph Founder Package v1",
+  "type": "object",
+  "required": [
+    "schema",
+    "package_id",
+    "kind",
+    "compatibility",
+    "payload",
+    "fallback",
+    "fixtures"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "serein.morph-package.v1"
+    },
+    "package_id": {
+      "pattern": "^PKG-FOUNDER-[A-Z0-9_.-]+@[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "kind": {
+      "const": "FOUNDER"
+    },
+    "compatibility": {
+      "type": "object",
+      "required": [
+        "engine_major"
+      ],
+      "properties": {
+        "engine_major": {
+          "const": 1
+        }
+      }
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "element_id",
+        "founder_id",
+        "public_lineage_id",
+        "starter_id",
+        "name",
+        "primary",
+        "recessive",
+        "signature",
+        "word_pools",
+        "palette",
+        "catalysts"
+      ],
+      "additionalProperties": false
+    },
+    "fallback": {
+      "type": "string",
+      "minLength": 1
+    },
+    "fixtures": {
+      "type": "array",
+      "minItems": 1
+    }
+  }
+}
+
+
