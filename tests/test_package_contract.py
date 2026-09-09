@@ -10,7 +10,7 @@ def test_hacs_layout_and_manifest():
     hacs = json.loads((ROOT / "hacs.json").read_text())
     assert manifest["domain"] == "morph_domain"
     assert manifest["config_flow"] is True
-    assert manifest["version"] == "1.6.0"
+    assert manifest["version"] == "1.7.0"
     assert manifest["documentation"].startswith("https://github.com/")
     assert manifest["issue_tracker"].startswith("https://github.com/")
     assert manifest["codeowners"]
@@ -65,3 +65,12 @@ def test_morph_first_operator_panel_is_packaged():
     assert 'class="locations"' in panel
     assert 'class="morph-stage"' in panel
 
+
+
+def test_dnav1_lineage_lifecycle_contract_is_packaged():
+    source = (COMPONENT / "_vendor/morph_sdk/dna_v1.py").read_text()
+    contract = (ROOT / "docs/DNA-V1-LIFECYCLE.md").read_text()
+    assert 'LINEAGE_SCHEMA = "serein.morph-lineage-capsule.v1"' in source
+    assert 'LIFECYCLE = ("SEALED", "HATCHING", "JUVENILE", "MATURE", "AWAKENED")' in source
+    assert 'SOCIAL_STATES = ("UNFAMILIAR", "AWARE", "FAMILIAR", "BONDED", "RESONANT")' in source
+    assert "Installation alone has no Morph-state effect" in contract
