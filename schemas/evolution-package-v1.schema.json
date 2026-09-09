@@ -48,6 +48,11 @@
         "presentation_id",
         "exclusions"
       ],
+      "properties": {
+        "form_id": {}, "class": {}, "lineages": {}, "evidence": {}, "catalysts": {},
+        "capabilities": {}, "stability": {}, "reversion": {},
+        "presentation_id": {}, "exclusions": {}
+      },
       "additionalProperties": false
     },
     "fallback": {
@@ -60,5 +65,4 @@
     }
   }
 }
-
 
