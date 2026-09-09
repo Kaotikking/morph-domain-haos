@@ -127,14 +127,11 @@ def test_memory_chronicle_may_append_and_counters_may_increase():
 
 @pytest.mark.parametrize("mutation", [
     lambda value: value["memory"]["chronicle"].clear(),
-    lambda value: value["memory"]["chronicle"].reverse(),
     lambda value: value["memory"]["experience"].update(growth=4),
     lambda value: value["memory"]["relationships"].pop("morph:b"),
 ])
 def test_memory_truth_cannot_be_erased_reordered_or_decreased(mutation):
     old = state()
-    if "reverse" in repr(mutation):
-        old["memory"]["chronicle"].append({"event_id": "second"})
     new = deepcopy(old)
     mutation(new)
     with pytest.raises(CoreContractError) as caught:
@@ -150,3 +147,13 @@ def test_frame_projection_degrades_without_deleting_truth():
     assert projected["visible"]["form"]["form"] == {"shape": "pulse"}
     assert projected["visible"]["voice"]["mode"] == "remembered-not-rendered"
     assert projected["canonical_state_preserved"] is True
+
+
+def test_memory_chronicle_cannot_be_reordered():
+    old = state()
+    old["memory"]["chronicle"].append({"event_id": "second"})
+    new = deepcopy(old)
+    new["memory"]["chronicle"].reverse()
+    with pytest.raises(CoreContractError) as caught:
+        validate_successor(old, new, "life")
+    assert caught.value.code == "MEMORY_REGRESSION"
