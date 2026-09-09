@@ -15,7 +15,7 @@ from homeassistant.helpers.storage import Store
 
 from ._vendor.morph_sdk.transfer import *
 from ._vendor.morph_sdk.transfer import _exact
-from .http_policy import admin_authorized
+from .http_policy import action_is_read, admin_authorized, durable_write_required
 
 # Kept explicit for migration auditing and package-contract readback.
 STORE_KEY = "morph_domain.transfer"
@@ -54,7 +54,7 @@ class MorphTransferManager:
         async with self.lock:
             now = datetime.now(UTC)
             candidate = MorphTransferLedger(deepcopy(self.ledger.data))
-            candidate.reconcile_expired(now)
+            maintenance_changed = candidate.reconcile_expired(now)
             if action == "prepare": result = candidate.prepare_inbound(body, now)
             elif action == "migrate": result = candidate.migrate_to_morph_core(body, now)
             elif action == "inward-bloom": result = candidate.record_inward_bloom(body, now)
@@ -74,8 +74,9 @@ class MorphTransferManager:
                 _exact(body, {"return_id", "snapshot_digest"}, "return commit request")
                 result = candidate.commit_return(str(body["return_id"]), str(body["snapshot_digest"]), now)
             else: raise TransferError("NOT_FOUND", "unknown transfer action")
-            await self.store.async_save(candidate.data)
-            self.ledger = candidate
+            if durable_write_required("transfer", action, maintenance_changed):
+                await self.store.async_save(candidate.data)
+                self.ledger = candidate
             return result
 
     async def handle_habitat(self, action: str, body: dict[str, Any]) -> dict[str, Any]:
@@ -101,9 +102,12 @@ class MorphTransferManager:
             now = datetime.now(UTC)
             candidate = MorphTransferLedger(deepcopy(self.ledger.data))
             changed = candidate.reconcile_expired(now)
-            environment = read_environment(self.hass, now)
-            for morph in candidate.data["morphs"].values():
-                changed = advance_morph(morph, now, environment) or changed
+            # The periodic scheduler is the only owner of elapsed-life advancement.
+            # Reading the dashboard/API must never advance life or sample HAOS.
+            if not action_is_read("habitat", action):
+                environment = read_environment(self.hass, now)
+                for morph in candidate.data["morphs"].values():
+                    changed = advance_morph(morph, now, environment) or changed
             if action == "list":
                 _exact(body, set(), "list request")
                 result = habitat_list(candidate, now)
