@@ -8,7 +8,10 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "custom_components/morph_domain/_vendor"))
 
-from morph_engine.core_contract import CORE_ORDER, CoreContractError
+from morph_engine.core_contract import (
+    CORE_ORDER, ENGINE_SCHEMA, PORTABLE_SCHEMA, SERN_SCHEMA,
+    CoreContractError, assert_schema_boundary,
+)
 from morph_engine.world_engine import (
     describe_engine, project_for_frame, route_facet,
     validate_engine_state, validate_successor,
@@ -184,3 +187,24 @@ def test_lineage_capsule_digest_is_recomputed():
     with pytest.raises(CoreContractError) as caught:
         validate_engine_state(bad)
     assert caught.value.code == "INVALID_LINEAGE_DIGEST"
+
+
+def test_schema_boundaries_require_an_explicit_exact_adapter():
+    assert_schema_boundary({"schema": ENGINE_SCHEMA}, ENGINE_SCHEMA)
+    assert_schema_boundary({"schema": PORTABLE_SCHEMA}, PORTABLE_SCHEMA)
+    assert_schema_boundary({"schema": SERN_SCHEMA}, SERN_SCHEMA)
+    for actual, expected in (
+        (ENGINE_SCHEMA, PORTABLE_SCHEMA),
+        (PORTABLE_SCHEMA, SERN_SCHEMA),
+        (SERN_SCHEMA, ENGINE_SCHEMA),
+    ):
+        with pytest.raises(CoreContractError) as caught:
+            assert_schema_boundary({"schema": actual}, expected)
+        assert caught.value.code == "SCHEMA_BOUNDARY_VIOLATION"
+
+
+def test_unknown_expected_schema_and_non_object_fail_closed():
+    for value, expected in (({"schema": ENGINE_SCHEMA}, "unknown"), (None, ENGINE_SCHEMA)):
+        with pytest.raises(CoreContractError) as caught:
+            assert_schema_boundary(value, expected)
+        assert caught.value.code == "SCHEMA_BOUNDARY_VIOLATION"

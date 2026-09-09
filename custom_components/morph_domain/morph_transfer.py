@@ -15,6 +15,7 @@ from homeassistant.helpers.storage import Store
 
 from ._vendor.morph_sdk.transfer import *
 from ._vendor.morph_sdk.transfer import _exact
+from .http_policy import admin_authorized
 
 # Kept explicit for migration auditing and package-contract readback.
 STORE_KEY = "morph_domain.transfer"
@@ -26,7 +27,7 @@ class MorphTransferView(HomeAssistantView):
     requires_auth = True
 
     async def post(self, request: Any, action: str) -> Any:
-        if action not in {"status", "evidence"} and not request["hass_user"].is_admin:
+        if not admin_authorized("transfer", action, request.get("hass_user")):
             return self.json({"ok": False, "error": {"code": "ADMIN_REQUIRED", "message": "administrator authority is required"}}, status_code=403)
         manager: MorphTransferManager = request.app["hass"].data[DATA_KEY]
         try:
