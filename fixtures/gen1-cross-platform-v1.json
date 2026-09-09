@@ -1,0 +1,27 @@
+{
+  "schema": "serein.morph-cross-platform-fixture.v1",
+  "snapshot": {
+    "morph_id": "fixture-pulse-child",
+    "lineage_ids": [
+      "E-04"
+    ],
+    "evidence": {
+      "CARE": 4,
+      "CAPABILITY": 3
+    },
+    "catalysts": [
+      "LIFE_MILESTONE"
+    ],
+    "active_owner": "FIXTURE"
+  },
+  "expected": {
+    "eligible_forms": [
+      "FORM-04-NATURAL-A"
+    ],
+    "truth_digest_same": true,
+    "presentations_may_differ": true,
+    "active_owner_count": 1
+  }
+}
+
+
