@@ -32,6 +32,14 @@ digest, executable rollback, Chronicle append, and complete acceptance readback.
 Ambiguous repairs require an administrator, and identity or authority conflicts
 isolate in Void.
 
+Version 1.10 hardens the existing domain without adding features: strict finite JSON
+and type-preserving comparisons, canonical Lineage Capsule digest binding,
+administrator-only mutation, escaped dashboard content, bounded identity-bound
+SERN envelopes, continuous one-engine exclusion, and removal of unreachable
+duplicate actions. The portable Morph snapshot, internal Morph Engine state, and
+SERN control envelope are distinct schemas; crossing a boundary requires an
+explicit adapter and never silent substitution.
+
 See [DNAv1 lineage and lifecycle](docs/DNA-V1-LIFECYCLE.md),
 [Morph Engine nine-Core architecture](docs/MORPH-ENGINE-NINE-CORE.md), and
 [Repair reflex ledger](docs/REPAIR-REFLEX-LEDGER-V1.md).
@@ -39,15 +47,14 @@ See [DNAv1 lineage and lifecycle](docs/DNA-V1-LIFECYCLE.md),
 ## Install
 
 Copy `custom_components/morph_domain` into Home Assistant, restart, then add
-**MorphDomain** from Settings > Devices & services. This layout is ready for HACS
-once published as a public repository and released.
+**MorphDomain** from Settings > Devices & services. This public repository is packaged for installation and updates through HACS.
 
 ## API
 
 - `POST /api/morph-domain/v1/transfer/{action}`
 - `POST /api/morph-domain/v1/habitat/{action}`
 
-Both require Home Assistant authentication. HTTP success alone never establishes
+Read operations require Home Assistant authentication. Mutation operations require a Home Assistant administrator. HTTP success alone never establishes
 ownership; transfer remains prepare, accept, commit, and reconciliation.
 
 ## Safe migration
