@@ -1,0 +1,17 @@
+{
+  "schema": "serein.morph-package-registry.v1",
+  "engine_major": 1,
+  "elements": {"01": "FIRE", "02": "AIR", "03": "EARTH", "04": "WATER"},
+  "founders": [
+    {"founder_id": "F-01", "name": "Ember", "public_lineage_id": "E-01", "starter_id": "L1-01"},
+    {"founder_id": "F-02", "name": "Breeze", "public_lineage_id": "E-02", "starter_id": "L1-02"},
+    {"founder_id": "F-03", "name": "Sentinel", "public_lineage_id": "E-03", "starter_id": "L1-03"},
+    {"founder_id": "F-04", "name": "Pulse", "public_lineage_id": "E-04", "starter_id": "L1-04"}
+  ],
+  "active_evolution_classes": ["NATURAL", "CONTEXT", "RESONANCE", "CULMINATION"],
+  "reserved_evolution_classes": ["FRAME_ARMOR", "COMBINED", "BATTLE"],
+  "evidence_categories": ["CARE", "RELATIONSHIP", "WEATHER", "LOCATION", "FRAME", "ACTIVITY", "CAPABILITY", "EVENT", "ENERGY"],
+  "expression_levels": [1, 2, 3, 4, 5],
+  "package_kinds": ["FOUNDER", "EVOLUTION", "PRESENTATION"]
+}
+
