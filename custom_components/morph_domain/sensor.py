@@ -20,7 +20,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Expose one stable, non-authoritative Horizon overview entity."""
-    async_add_entities([MorphDomainHorizonEntity(hass, entry)], True)
+    async_add_entities([MorphDomainHorizonEntity(hass, entry), MorphDomainEngineHealthEntity(hass, entry)], True)
 
 
 class MorphDomainHorizonEntity(SensorEntity):
@@ -83,3 +83,30 @@ class MorphDomainHorizonEntity(SensorEntity):
             "morphs": rows,
         }
 
+
+
+class MorphDomainEngineHealthEntity(SensorEntity):
+    """Expose bounded process telemetry without Morph identity or private state."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Morph Engine health"
+    _attr_icon = "mdi:heart-pulse"
+    _attr_native_unit_of_measurement = "ms"
+    _attr_should_poll = True
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        self.hass = hass
+        self._attr_unique_id = f"{entry.entry_id}_morph_engine_health"
+        self._attr_native_value = 0.0
+        self._attr_extra_state_attributes: dict[str, Any] = {
+            "schema": "serein.morph-engine-observability.v1",
+            "status": "STARTING",
+        }
+
+    async def async_update(self) -> None:
+        """Read process-local counters while holding the authoritative manager lock."""
+        manager = self.hass.data[DATA_KEY]
+        async with manager.lock:
+            snapshot = manager.metrics.snapshot(manager.ledger.data)
+        self._attr_native_value = snapshot["last_tick_duration_ms"]
+        self._attr_extra_state_attributes = snapshot
