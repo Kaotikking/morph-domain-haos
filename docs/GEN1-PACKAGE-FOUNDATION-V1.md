@@ -1,5 +1,22 @@
 # Morph Gen-1 Package Foundation v1
 
+## Canonical hardening generation 1.15.0
+
+- GitHub is the implementation source of truth. Founder recessives remain
+  Ember/PLASMA, Breeze/LIGHT, Sentinel/METAL, and Pulse/SOUND.
+- All six unordered public two-primitive combinations are admitted:
+  PLASMA, MAGMA, STEAM, DUST, STORM, and VERDURE.
+- Every package carries a verified canonical `content_digest`.
+- Evolution presentation references must resolve inside the admitted package
+  set; the built-ins bind `PRES-GEN1-CANONICAL`.
+- Element/form IDs are registry-driven, so a future Founder requires one new
+  element registration rather than resolver logic changes.
+- Source-package admission is no-effect. Any persisted Morph transition also
+  requires the exact WHO/WHAT/WHEN/WHERE/HOW, authority, predecessor, rollback,
+  and receipt envelope.
+- Environmental context may select or unlock a reversible CONTEXT form; it
+  never raises permanent elemental mastery or rewrites lineage by itself.
+
 Gen-1 freezes an extensible grammar, not a fixed catalog of final bodies. Morph identity and life remain canonical while Founder, Evolution, and Presentation packages add admitted possibilities.
 
 ## Stable registry
@@ -51,4 +68,5 @@ Package envelopes use serein.morph-package.v1, an immutable package ID with sema
 The golden suite proves four shared elemental lineages and Founder prefixes, drop-in registration of a fifth element/Founder without resolver changes, branching eligibility, expression/evolution separation, safe reversion semantics, drop-in presentation and constrained fallback, reserved future classes, deterministic digests, and duplicate or invalid package rejection.
 
 The built-in registry supplies four Founder packages and sixteen elemental evolution packages: one NATURAL, CONTEXT, RESONANCE, and CULMINATION branch for each primitive element. These are machine-stable branch seeds, not a closed catalog of player-facing bodies. The cross-platform fixture proves identical eligible-form truth with different SERN-LOW and Android presentation profiles.
+
 
