@@ -1,0 +1,909 @@
+{
+  "schema": "serein.morph-builtins.v1",
+  "packages": [
+    {
+      "schema": "serein.morph-package.v1",
+      "package_id": "PKG-FOUNDER-01-EMBER@1.0.0",
+      "kind": "FOUNDER",
+      "compatibility": {
+        "engine_major": 1
+      },
+      "payload": {
+        "element_id": "01",
+        "founder_id": "F-01",
+        "public_lineage_id": "E-01",
+        "starter_id": "L1-01",
+        "name": "Ember",
+        "primary": "FIRE",
+        "recessive": "PLASMA",
+        "signature": "PLASMA_ORIGIN_FRAGMENT",
+        "word_pools": [
+          "A",
+          "B",
+          "C"
+        ],
+        "palette": "PAL-01",
+        "catalysts": [
+          "CARE",
+          "RELATIONSHIP",
+          "WEATHER",
+          "FRAME"
+        ]
+      },
+      "fallback": "SEREIN-CANONICAL-FALLBACK",
+      "fixtures": [
+        "founder-01"
+      ]
+    },
+    {
+      "schema": "serein.morph-package.v1",
+      "package_id": "PKG-EVOLUTION-01-NATURAL-A@1.0.0",
+      "kind": "EVOLUTION",
+      "compatibility": {
+        "engine_major": 1
+      },
+      "payload": {
+        "form_id": "FORM-01-NATURAL-A",
+        "class": "NATURAL",
+        "lineages": [
+          "E-01",
+          "F-01",
+          "L1-01"
+        ],
+        "evidence": {
+          "CARE": 2,
+          "CAPABILITY": 2
+        },
+        "catalysts": [
+          "LIFE_MILESTONE"
+        ],
+        "capabilities": [
+          "MOVEMENT",
+          "PROTECTION",
+          "RESTORATION",
+          "PERCEPTION",
+          "PROJECTION"
+        ],
+        "stability": "STABLE",
+        "reversion": "STABLE",
+        "presentation_id": "PRES-GEN1-01",
+        "exclusions": [
+          "FRAME_ARMOR",
+          "COMBINED",
+          "BATTLE"
+        ]
+      },
+      "fallback": "SEREIN-CANONICAL-FALLBACK",
+      "fixtures": [
+        "evolution-01-natural"
+      ]
+    },
+    {
+      "schema": "serein.morph-package.v1",
+      "package_id": "PKG-EVOLUTION-01-CONTEXT-A@1.0.0",
+      "kind": "EVOLUTION",
+      "compatibility": {
+        "engine_major": 1
+      },
+      "payload": {
+        "form_id": "FORM-01-CONTEXT-A",
+        "class": "CONTEXT",
+        "lineages": [
+          "E-01",
+          "F-01",
+          "L1-01"
+        ],
+        "evidence": {
+          "WEATHER": 3,
+          "LOCATION": 2
+        },
+        "catalysts": [
+          "ENVIRONMENT_SHIFT"
+        ],
+        "capabilities": [
+          "MOVEMENT",
+          "PROTECTION",
+          "RESTORATION",
+          "PERCEPTION",
+          "PROJECTION"
+        ],
+        "stability": "CONDITIONAL",
+        "reversion": "CONTEXT_END",
+        "presentation_id": "PRES-GEN1-01",
+        "exclusions": [
+          "FRAME_ARMOR",
+          "COMBINED",
+          "BATTLE"
+        ]
+      },
+      "fallback": "SEREIN-CANONICAL-FALLBACK",
+      "fixtures": [
+        "evolution-01-context"
+      ]
+    },
+    {
+      "schema": "serein.morph-package.v1",
+      "package_id": "PKG-EVOLUTION-01-RESONANCE-A@1.0.0",
+      "kind": "EVOLUTION",
+      "compatibility": {
+        "engine_major": 1
+      },
+      "payload": {
+        "form_id": "FORM-01-RESONANCE-A",
+        "class": "RESONANCE",
+        "lineages": [
+          "E-01",
+          "F-01",
+          "L1-01"
+        ],
+        "evidence": {
+          "RELATIONSHIP": 4,
+          "CARE": 3
+        },
+        "catalysts": [
+          "RELATIONSHIP_RESONANCE"
+        ],
+        "capabilities": [
+          "MOVEMENT",
+          "PROTECTION",
+          "RESTORATION",
+          "PERCEPTION",
+          "PROJECTION"
+        ],
+        "stability": "CONDITIONAL",
+        "reversion": "CONTEXT_END",
+        "presentation_id": "PRES-GEN1-01",
+        "exclusions": [
+          "FRAME_ARMOR",
+          "COMBINED",
+          "BATTLE"
+        ]
+      },
+      "fallback": "SEREIN-CANONICAL-FALLBACK",
+      "fixtures": [
+        "evolution-01-resonance"
+      ]
+    },
+    {
+      "schema": "serein.morph-package.v1",
+      "package_id": "PKG-EVOLUTION-01-CULMINATION-A@1.0.0",
+      "kind": "EVOLUTION",
+      "compatibility": {
+        "engine_major": 1
+      },
+      "payload": {
+        "form_id": "FORM-01-CULMINATION-A",
+        "class": "CULMINATION",
+        "lineages": [
+          "E-01",
+          "F-01",
+          "L1-01"
+        ],
+        "evidence": {
+          "CARE": 5,
+          "CAPABILITY": 5,
+          "EVENT": 4
+        },
+        "catalysts": [
+          "MASTERY_CONVERGENCE"
+        ],
+        "capabilities": [
+          "MOVEMENT",
+          "PROTECTION",
+          "RESTORATION",
+          "PERCEPTION",
+          "PROJECTION"
+        ],
+        "stability": "STABLE",
+        "reversion": "STABLE",
+        "presentation_id": "PRES-GEN1-01",
+        "exclusions": [
+          "FRAME_ARMOR",
+          "COMBINED",
+          "BATTLE"
+        ]
+      },
+      "fallback": "SEREIN-CANONICAL-FALLBACK",
+      "fixtures": [
+        "evolution-01-culmination"
+      ]
+    },
+    {
+      "schema": "serein.morph-package.v1",
+      "package_id": "PKG-FOUNDER-02-BREEZE@1.0.0",
+      "kind": "FOUNDER",
+      "compatibility": {
+        "engine_major": 1
+      },
+      "payload": {
+        "element_id": "02",
+        "founder_id": "F-02",
+        "public_lineage_id": "E-02",
+        "starter_id": "L1-02",
+        "name": "Breeze",
+        "primary": "AIR",
+        "recessive": "LIGHT",
+        "signature": "LIGHT_ORIGIN_FRAGMENT",
+        "word_pools": [
+          "A",
+          "B",
+          "C"
+        ],
+        "palette": "PAL-02",
+        "catalysts": [
+          "CARE",
+          "RELATIONSHIP",
+          "WEATHER",
+          "FRAME"
+        ]
+      },
+      "fallback": "SEREIN-CANONICAL-FALLBACK",
+      "fixtures": [
+        "founder-02"
+      ]
+    },
+    {
+      "schema": "serein.morph-package.v1",
+      "package_id": "PKG-EVOLUTION-02-NATURAL-A@1.0.0",
+      "kind": "EVOLUTION",
+      "compatibility": {
+        "engine_major": 1
+      },
+      "payload": {
+        "form_id": "FORM-02-NATURAL-A",
+        "class": "NATURAL",
+        "lineages": [
+          "E-02",
+          "F-02",
+          "L1-02"
+        ],
+        "evidence": {
+          "CARE": 2,
+          "CAPABILITY": 2
+        },
+        "catalysts": [
+          "LIFE_MILESTONE"
+        ],
+        "capabilities": [
+          "MOVEMENT",
+          "PROTECTION",
+          "RESTORATION",
+          "PERCEPTION",
+          "PROJECTION"
+        ],
+        "stability": "STABLE",
+        "reversion": "STABLE",
+        "presentation_id": "PRES-GEN1-02",
+        "exclusions": [
+          "FRAME_ARMOR",
+          "COMBINED",
+          "BATTLE"
+        ]
+      },
+      "fallback": "SEREIN-CANONICAL-FALLBACK",
+      "fixtures": [
+        "evolution-02-natural"
+      ]
+    },
+    {
+      "schema": "serein.morph-package.v1",
+      "package_id": "PKG-EVOLUTION-02-CONTEXT-A@1.0.0",
+      "kind": "EVOLUTION",
+      "compatibility": {
+        "engine_major": 1
+      },
+      "payload": {
+        "form_id": "FORM-02-CONTEXT-A",
+        "class": "CONTEXT",
+        "lineages": [
+          "E-02",
+          "F-02",
+          "L1-02"
+        ],
+        "evidence": {
+          "WEATHER": 3,
+          "LOCATION": 2
+        },
+        "catalysts": [
+          "ENVIRONMENT_SHIFT"
+        ],
+        "capabilities": [
+          "MOVEMENT",
+          "PROTECTION",
+          "RESTORATION",
+          "PERCEPTION",
+          "PROJECTION"
+        ],
+        "stability": "CONDITIONAL",
+        "reversion": "CONTEXT_END",
+        "presentation_id": "PRES-GEN1-02",
+        "exclusions": [
+          "FRAME_ARMOR",
+          "COMBINED",
+          "BATTLE"
+        ]
+      },
+      "fallback": "SEREIN-CANONICAL-FALLBACK",
+      "fixtures": [
+        "evolution-02-context"
+      ]
+    },
+    {
+      "schema": "serein.morph-package.v1",
+      "package_id": "PKG-EVOLUTION-02-RESONANCE-A@1.0.0",
+      "kind": "EVOLUTION",
+      "compatibility": {
+        "engine_major": 1
+      },
+      "payload": {
+        "form_id": "FORM-02-RESONANCE-A",
+        "class": "RESONANCE",
+        "lineages": [
+          "E-02",
+          "F-02",
+          "L1-02"
+        ],
+        "evidence": {
+          "RELATIONSHIP": 4,
+          "CARE": 3
+        },
+        "catalysts": [
+          "RELATIONSHIP_RESONANCE"
+        ],
+        "capabilities": [
+          "MOVEMENT",
+          "PROTECTION",
+          "RESTORATION",
+          "PERCEPTION",
+          "PROJECTION"
+        ],
+        "stability": "CONDITIONAL",
+        "reversion": "CONTEXT_END",
+        "presentation_id": "PRES-GEN1-02",
+        "exclusions": [
+          "FRAME_ARMOR",
+          "COMBINED",
+          "BATTLE"
+        ]
+      },
+      "fallback": "SEREIN-CANONICAL-FALLBACK",
+      "fixtures": [
+        "evolution-02-resonance"
+      ]
+    },
+    {
+      "schema": "serein.morph-package.v1",
+      "package_id": "PKG-EVOLUTION-02-CULMINATION-A@1.0.0",
+      "kind": "EVOLUTION",
+      "compatibility": {
+        "engine_major": 1
+      },
+      "payload": {
+        "form_id": "FORM-02-CULMINATION-A",
+        "class": "CULMINATION",
+        "lineages": [
+          "E-02",
+          "F-02",
+          "L1-02"
+        ],
+        "evidence": {
+          "CARE": 5,
+          "CAPABILITY": 5,
+          "EVENT": 4
+        },
+        "catalysts": [
+          "MASTERY_CONVERGENCE"
+        ],
+        "capabilities": [
+          "MOVEMENT",
+          "PROTECTION",
+          "RESTORATION",
+          "PERCEPTION",
+          "PROJECTION"
+        ],
+        "stability": "STABLE",
+        "reversion": "STABLE",
+        "presentation_id": "PRES-GEN1-02",
+        "exclusions": [
+          "FRAME_ARMOR",
+          "COMBINED",
+          "BATTLE"
+        ]
+      },
+      "fallback": "SEREIN-CANONICAL-FALLBACK",
+      "fixtures": [
+        "evolution-02-culmination"
+      ]
+    },
+    {
+      "schema": "serein.morph-package.v1",
+      "package_id": "PKG-FOUNDER-03-SENTINEL@1.0.0",
+      "kind": "FOUNDER",
+      "compatibility": {
+        "engine_major": 1
+      },
+      "payload": {
+        "element_id": "03",
+        "founder_id": "F-03",
+        "public_lineage_id": "E-03",
+        "starter_id": "L1-03",
+        "name": "Sentinel",
+        "primary": "EARTH",
+        "recessive": "METAL",
+        "signature": "METAL_ORIGIN_FRAGMENT",
+        "word_pools": [
+          "A",
+          "B",
+          "C"
+        ],
+        "palette": "PAL-03",
+        "catalysts": [
+          "CARE",
+          "RELATIONSHIP",
+          "WEATHER",
+          "FRAME"
+        ]
+      },
+      "fallback": "SEREIN-CANONICAL-FALLBACK",
+      "fixtures": [
+        "founder-03"
+      ]
+    },
+    {
+      "schema": "serein.morph-package.v1",
+      "package_id": "PKG-EVOLUTION-03-NATURAL-A@1.0.0",
+      "kind": "EVOLUTION",
+      "compatibility": {
+        "engine_major": 1
+      },
+      "payload": {
+        "form_id": "FORM-03-NATURAL-A",
+        "class": "NATURAL",
+        "lineages": [
+          "E-03",
+          "F-03",
+          "L1-03"
+        ],
+        "evidence": {
+          "CARE": 2,
+          "CAPABILITY": 2
+        },
+        "catalysts": [
+          "LIFE_MILESTONE"
+        ],
+        "capabilities": [
+          "MOVEMENT",
+          "PROTECTION",
+          "RESTORATION",
+          "PERCEPTION",
+          "PROJECTION"
+        ],
+        "stability": "STABLE",
+        "reversion": "STABLE",
+        "presentation_id": "PRES-GEN1-03",
+        "exclusions": [
+          "FRAME_ARMOR",
+          "COMBINED",
+          "BATTLE"
+        ]
+      },
+      "fallback": "SEREIN-CANONICAL-FALLBACK",
+      "fixtures": [
+        "evolution-03-natural"
+      ]
+    },
+    {
+      "schema": "serein.morph-package.v1",
+      "package_id": "PKG-EVOLUTION-03-CONTEXT-A@1.0.0",
+      "kind": "EVOLUTION",
+      "compatibility": {
+        "engine_major": 1
+      },
+      "payload": {
+        "form_id": "FORM-03-CONTEXT-A",
+        "class": "CONTEXT",
+        "lineages": [
+          "E-03",
+          "F-03",
+          "L1-03"
+        ],
+        "evidence": {
+          "WEATHER": 3,
+          "LOCATION": 2
+        },
+        "catalysts": [
+          "ENVIRONMENT_SHIFT"
+        ],
+        "capabilities": [
+          "MOVEMENT",
+          "PROTECTION",
+          "RESTORATION",
+          "PERCEPTION",
+          "PROJECTION"
+        ],
+        "stability": "CONDITIONAL",
+        "reversion": "CONTEXT_END",
+        "presentation_id": "PRES-GEN1-03",
+        "exclusions": [
+          "FRAME_ARMOR",
+          "COMBINED",
+          "BATTLE"
+        ]
+      },
+      "fallback": "SEREIN-CANONICAL-FALLBACK",
+      "fixtures": [
+        "evolution-03-context"
+      ]
+    },
+    {
+      "schema": "serein.morph-package.v1",
+      "package_id": "PKG-EVOLUTION-03-RESONANCE-A@1.0.0",
+      "kind": "EVOLUTION",
+      "compatibility": {
+        "engine_major": 1
+      },
+      "payload": {
+        "form_id": "FORM-03-RESONANCE-A",
+        "class": "RESONANCE",
+        "lineages": [
+          "E-03",
+          "F-03",
+          "L1-03"
+        ],
+        "evidence": {
+          "RELATIONSHIP": 4,
+          "CARE": 3
+        },
+        "catalysts": [
+          "RELATIONSHIP_RESONANCE"
+        ],
+        "capabilities": [
+          "MOVEMENT",
+          "PROTECTION",
+          "RESTORATION",
+          "PERCEPTION",
+          "PROJECTION"
+        ],
+        "stability": "CONDITIONAL",
+        "reversion": "CONTEXT_END",
+        "presentation_id": "PRES-GEN1-03",
+        "exclusions": [
+          "FRAME_ARMOR",
+          "COMBINED",
+          "BATTLE"
+        ]
+      },
+      "fallback": "SEREIN-CANONICAL-FALLBACK",
+      "fixtures": [
+        "evolution-03-resonance"
+      ]
+    },
+    {
+      "schema": "serein.morph-package.v1",
+      "package_id": "PKG-EVOLUTION-03-CULMINATION-A@1.0.0",
+      "kind": "EVOLUTION",
+      "compatibility": {
+        "engine_major": 1
+      },
+      "payload": {
+        "form_id": "FORM-03-CULMINATION-A",
+        "class": "CULMINATION",
+        "lineages": [
+          "E-03",
+          "F-03",
+          "L1-03"
+        ],
+        "evidence": {
+          "CARE": 5,
+          "CAPABILITY": 5,
+          "EVENT": 4
+        },
+        "catalysts": [
+          "MASTERY_CONVERGENCE"
+        ],
+        "capabilities": [
+          "MOVEMENT",
+          "PROTECTION",
+          "RESTORATION",
+          "PERCEPTION",
+          "PROJECTION"
+        ],
+        "stability": "STABLE",
+        "reversion": "STABLE",
+        "presentation_id": "PRES-GEN1-03",
+        "exclusions": [
+          "FRAME_ARMOR",
+          "COMBINED",
+          "BATTLE"
+        ]
+      },
+      "fallback": "SEREIN-CANONICAL-FALLBACK",
+      "fixtures": [
+        "evolution-03-culmination"
+      ]
+    },
+    {
+      "schema": "serein.morph-package.v1",
+      "package_id": "PKG-FOUNDER-04-PULSE@1.0.0",
+      "kind": "FOUNDER",
+      "compatibility": {
+        "engine_major": 1
+      },
+      "payload": {
+        "element_id": "04",
+        "founder_id": "F-04",
+        "public_lineage_id": "E-04",
+        "starter_id": "L1-04",
+        "name": "Pulse",
+        "primary": "WATER",
+        "recessive": "SOUND",
+        "signature": "SOUND_ORIGIN_FRAGMENT",
+        "word_pools": [
+          "A",
+          "B",
+          "C"
+        ],
+        "palette": "PAL-04",
+        "catalysts": [
+          "CARE",
+          "RELATIONSHIP",
+          "WEATHER",
+          "FRAME"
+        ]
+      },
+      "fallback": "SEREIN-CANONICAL-FALLBACK",
+      "fixtures": [
+        "founder-04"
+      ]
+    },
+    {
+      "schema": "serein.morph-package.v1",
+      "package_id": "PKG-EVOLUTION-04-NATURAL-A@1.0.0",
+      "kind": "EVOLUTION",
+      "compatibility": {
+        "engine_major": 1
+      },
+      "payload": {
+        "form_id": "FORM-04-NATURAL-A",
+        "class": "NATURAL",
+        "lineages": [
+          "E-04",
+          "F-04",
+          "L1-04"
+        ],
+        "evidence": {
+          "CARE": 2,
+          "CAPABILITY": 2
+        },
+        "catalysts": [
+          "LIFE_MILESTONE"
+        ],
+        "capabilities": [
+          "MOVEMENT",
+          "PROTECTION",
+          "RESTORATION",
+          "PERCEPTION",
+          "PROJECTION"
+        ],
+        "stability": "STABLE",
+        "reversion": "STABLE",
+        "presentation_id": "PRES-GEN1-04",
+        "exclusions": [
+          "FRAME_ARMOR",
+          "COMBINED",
+          "BATTLE"
+        ]
+      },
+      "fallback": "SEREIN-CANONICAL-FALLBACK",
+      "fixtures": [
+        "evolution-04-natural"
+      ]
+    },
+    {
+      "schema": "serein.morph-package.v1",
+      "package_id": "PKG-EVOLUTION-04-CONTEXT-A@1.0.0",
+      "kind": "EVOLUTION",
+      "compatibility": {
+        "engine_major": 1
+      },
+      "payload": {
+        "form_id": "FORM-04-CONTEXT-A",
+        "class": "CONTEXT",
+        "lineages": [
+          "E-04",
+          "F-04",
+          "L1-04"
+        ],
+        "evidence": {
+          "WEATHER": 3,
+          "LOCATION": 2
+        },
+        "catalysts": [
+          "ENVIRONMENT_SHIFT"
+        ],
+        "capabilities": [
+          "MOVEMENT",
+          "PROTECTION",
+          "RESTORATION",
+          "PERCEPTION",
+          "PROJECTION"
+        ],
+        "stability": "CONDITIONAL",
+        "reversion": "CONTEXT_END",
+        "presentation_id": "PRES-GEN1-04",
+        "exclusions": [
+          "FRAME_ARMOR",
+          "COMBINED",
+          "BATTLE"
+        ]
+      },
+      "fallback": "SEREIN-CANONICAL-FALLBACK",
+      "fixtures": [
+        "evolution-04-context"
+      ]
+    },
+    {
+      "schema": "serein.morph-package.v1",
+      "package_id": "PKG-EVOLUTION-04-RESONANCE-A@1.0.0",
+      "kind": "EVOLUTION",
+      "compatibility": {
+        "engine_major": 1
+      },
+      "payload": {
+        "form_id": "FORM-04-RESONANCE-A",
+        "class": "RESONANCE",
+        "lineages": [
+          "E-04",
+          "F-04",
+          "L1-04"
+        ],
+        "evidence": {
+          "RELATIONSHIP": 4,
+          "CARE": 3
+        },
+        "catalysts": [
+          "RELATIONSHIP_RESONANCE"
+        ],
+        "capabilities": [
+          "MOVEMENT",
+          "PROTECTION",
+          "RESTORATION",
+          "PERCEPTION",
+          "PROJECTION"
+        ],
+        "stability": "CONDITIONAL",
+        "reversion": "CONTEXT_END",
+        "presentation_id": "PRES-GEN1-04",
+        "exclusions": [
+          "FRAME_ARMOR",
+          "COMBINED",
+          "BATTLE"
+        ]
+      },
+      "fallback": "SEREIN-CANONICAL-FALLBACK",
+      "fixtures": [
+        "evolution-04-resonance"
+      ]
+    },
+    {
+      "schema": "serein.morph-package.v1",
+      "package_id": "PKG-EVOLUTION-04-CULMINATION-A@1.0.0",
+      "kind": "EVOLUTION",
+      "compatibility": {
+        "engine_major": 1
+      },
+      "payload": {
+        "form_id": "FORM-04-CULMINATION-A",
+        "class": "CULMINATION",
+        "lineages": [
+          "E-04",
+          "F-04",
+          "L1-04"
+        ],
+        "evidence": {
+          "CARE": 5,
+          "CAPABILITY": 5,
+          "EVENT": 4
+        },
+        "catalysts": [
+          "MASTERY_CONVERGENCE"
+        ],
+        "capabilities": [
+          "MOVEMENT",
+          "PROTECTION",
+          "RESTORATION",
+          "PERCEPTION",
+          "PROJECTION"
+        ],
+        "stability": "STABLE",
+        "reversion": "STABLE",
+        "presentation_id": "PRES-GEN1-04",
+        "exclusions": [
+          "FRAME_ARMOR",
+          "COMBINED",
+          "BATTLE"
+        ]
+      },
+      "fallback": "SEREIN-CANONICAL-FALLBACK",
+      "fixtures": [
+        "evolution-04-culmination"
+      ]
+    },
+    {
+      "schema": "serein.morph-package.v1",
+      "package_id": "PKG-PRESENTATION-GEN1-CANONICAL@1.0.0",
+      "kind": "PRESENTATION",
+      "compatibility": {
+        "engine_major": 1
+      },
+      "payload": {
+        "presentation_id": "PRES-GEN1-CANONICAL",
+        "forms": [
+          "FORM-01-NATURAL-A",
+          "FORM-01-CONTEXT-A",
+          "FORM-01-RESONANCE-A",
+          "FORM-01-CULMINATION-A",
+          "FORM-02-NATURAL-A",
+          "FORM-02-CONTEXT-A",
+          "FORM-02-RESONANCE-A",
+          "FORM-02-CULMINATION-A",
+          "FORM-03-NATURAL-A",
+          "FORM-03-CONTEXT-A",
+          "FORM-03-RESONANCE-A",
+          "FORM-03-CULMINATION-A",
+          "FORM-04-NATURAL-A",
+          "FORM-04-CONTEXT-A",
+          "FORM-04-RESONANCE-A",
+          "FORM-04-CULMINATION-A"
+        ],
+        "capability_tiers": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "silhouette": "ELEMENTAL_BASE",
+        "palette": [
+          "PAL-01",
+          "PAL-02",
+          "PAL-03",
+          "PAL-04"
+        ],
+        "effects": [
+          "ELEMENTAL_CONTEXT"
+        ],
+        "animations": [
+          "IDENTIFY",
+          "CALL",
+          "FORM",
+          "REVEAL",
+          "SIGNATURE",
+          "SETTLE"
+        ],
+        "voice": [
+          "ELEMENTAL_CALL"
+        ],
+        "localization": {
+          "en": "Canonical Gen-1"
+        },
+        "accessibility": {
+          "reduced_motion": true,
+          "silent_mode": true
+        },
+        "frame_profiles": {
+          "SERN-LOW": "PIXEL",
+          "ANDROID": "VECTOR",
+          "HAOS-GPU": "ENHANCED"
+        }
+      },
+      "fallback": "SEREIN-CANONICAL-FALLBACK",
+      "fixtures": [
+        "presentation-constrained",
+        "presentation-android"
+      ]
+    }
+  ]
+}
+
+
