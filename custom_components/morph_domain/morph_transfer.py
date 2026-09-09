@@ -26,6 +26,8 @@ class MorphTransferView(HomeAssistantView):
     requires_auth = True
 
     async def post(self, request: Any, action: str) -> Any:
+        if action not in {"status", "evidence"} and not request["hass_user"].is_admin:
+            return self.json({"ok": False, "error": {"code": "ADMIN_REQUIRED", "message": "administrator authority is required"}}, status_code=403)
         manager: MorphTransferManager = request.app["hass"].data[DATA_KEY]
         try:
             body = await request.json()
@@ -45,6 +47,9 @@ class MorphTransferManager:
         self.lock = asyncio.Lock()
 
     async def handle(self, action: str, body: dict[str, Any]) -> dict[str, Any]:
+        from .migration import legacy_engine_enabled
+        if action not in {"status", "evidence"} and legacy_engine_enabled(self.hass):
+            raise TransferError("ENGINE_CONFLICT", "legacy Morph engine is active")
         async with self.lock:
             now = datetime.now(UTC)
             candidate = MorphTransferLedger(deepcopy(self.ledger.data))
@@ -74,6 +79,9 @@ class MorphTransferManager:
 
     async def handle_habitat(self, action: str, body: dict[str, Any]) -> dict[str, Any]:
         """Mutate/read habitat state under the same durable authority lock."""
+        from .migration import legacy_engine_enabled
+        if action not in {"list", "status", "history"} and legacy_engine_enabled(self.hass):
+            raise TransferError("ENGINE_CONFLICT", "legacy Morph engine is active")
         from .morph_habitat import (
             advance_morph,
             care_for_morph,
@@ -84,8 +92,6 @@ class MorphTransferManager:
             place_morph,
             read_environment,
             update_presentation,
-            register_founder_axis,
-            advance_founder_axis,
             register_founder_axis,
             advance_founder_axis,
         )
@@ -121,12 +127,6 @@ class MorphTransferManager:
             elif action == "advance-axis":
                 result = advance_founder_axis(candidate, body, now)
                 changed = True
-            elif action == "register-axis":
-                result = register_founder_axis(candidate, body, now)
-                changed = True
-            elif action == "advance-axis":
-                result = advance_founder_axis(candidate, body, now)
-                changed = True
             elif action == "history":
                 _exact(body, {"morph_id"}, "history request")
                 result = habitat_history(candidate, str(body["morph_id"]), now)
@@ -139,6 +139,9 @@ class MorphTransferManager:
 
     async def tick_habitats(self) -> None:
         """Persist one bounded interval for every HAOS-owned active Morph."""
+        from .migration import legacy_engine_enabled
+        if legacy_engine_enabled(self.hass):
+            return
         from .morph_habitat import advance_morph, read_environment, run_automatic_reflexes
 
         async with self.lock:
