@@ -19,7 +19,18 @@ switching, directional five-state social edges, immutable family links, atomic
 breeding eligibility, and no-effect Code Haven backfill planning. Installing
 these validators never rewrites an existing Morph.
 
-See [DNAv1 lineage and lifecycle](docs/DNA-V1-LIFECYCLE.md).
+Version 1.8 introduces the **Morph Engine** inside MorphDomain. It is one
+efficient HAOS runtime with nine internal Core boundaries—Platform, Root,
+Memory, Knowledge, UI, Audio, Personality, Modular, and Cloud—and no Kernel.
+Its Life, Social, Expression, Combination, and Reflex facets may write only
+their admitted Cores. Frames consume canonical Morph truth and degrade
+gracefully when a capability is absent; they never redefine or erase it.
+Deterministic Code Haven repairs are ledger-governed, ambiguous repairs require
+an administrator, and identity or authority conflicts isolate in Void.
+
+See [DNAv1 lineage and lifecycle](docs/DNA-V1-LIFECYCLE.md),
+[Morph Engine nine-Core architecture](docs/MORPH-ENGINE-NINE-CORE.md), and
+[Repair reflex ledger](docs/REPAIR-REFLEX-LEDGER-V1.md).
 
 ## Install
 
