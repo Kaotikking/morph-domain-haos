@@ -1,7 +1,12 @@
 import copy
+from pathlib import Path
+import sys
+
 import pytest
 
-from custom_components.morph_domain._vendor.morph_sdk.dna_v1 import (
+sys.path.insert(0, str(Path(__file__).parents[1] / "custom_components/morph_domain/_vendor"))
+
+from morph_sdk.dna_v1 import (
     DNAv1Error, LINEAGE_SCHEMA, LIFECYCLE_SCHEMA, SOCIAL_SCHEMA,
     capsule_digest, code_haven_backfill_plan, opaque_egg_projection,
     switch_awakened_expression, transition_lifecycle,
