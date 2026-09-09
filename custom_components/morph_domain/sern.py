@@ -1,31 +1,52 @@
-"""SERN-native MorphDomain control-plane projection.
-
-This module does not replace the established 13-byte fleet packet and does not
-carry a Morph snapshot. It emits an attributable control envelope whose nine
-core fields can authorize a separate, governed transfer contract.
-"""
+"""SERN-native MorphDomain control-plane projection."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
 import json
+import math
 from typing import Any, Mapping
 
 SCHEMA = "sern.morph_domain.v1"
-NINE_CORES = (
-    "identity", "lineage", "life", "expression", "memory",
-    "social", "environment", "authority", "transport",
-)
+MAX_ENVELOPE_BYTES = 16384
+NINE_CORES = ("identity", "lineage", "life", "expression", "memory", "social", "environment", "authority", "transport")
 MESSAGE_TYPES = frozenset({"STATE", "EVENT", "COMMAND", "RECEIPT", "OPEN_TRANSPORT"})
 
 
 class SernEnvelopeError(ValueError):
-    """A MorphDomain SERN envelope failed closed."""
-
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
         self.code = code
+
+
+def _strict_json(value: Any, path: str = "envelope") -> None:
+    if value is None or type(value) in {str, int, bool}:
+        return
+    if type(value) is float:
+        if not math.isfinite(value):
+            raise SernEnvelopeError("INVALID_JSON", f"{path} contains a non-finite number")
+        return
+    if isinstance(value, list):
+        for index, item in enumerate(value):
+            _strict_json(item, f"{path}[{index}]")
+        return
+    if isinstance(value, dict) and all(isinstance(k, str) and k for k in value):
+        for key, item in value.items():
+            _strict_json(item, f"{path}.{key}")
+        return
+    raise SernEnvelopeError("INVALID_JSON", f"{path} is not strict JSON")
+
+
+def _encoded(value: Any) -> bytes:
+    _strict_json(value)
+    try:
+        data = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")
+    except (TypeError, ValueError) as err:
+        raise SernEnvelopeError("INVALID_JSON", "envelope is not canonical JSON") from err
+    if len(data) > MAX_ENVELOPE_BYTES:
+        raise SernEnvelopeError("ENVELOPE_TOO_LARGE", "SERN envelope exceeds the control-plane limit")
+    return data
 
 
 @dataclass(frozen=True)
@@ -37,25 +58,18 @@ class MorphSernEnvelope:
     cores: Mapping[str, Any]
 
     def as_dict(self) -> dict[str, Any]:
-        return {
-            "schema": SCHEMA,
-            "message_id": self.message_id,
-            "message_type": self.message_type,
-            "morph_id": self.morph_id,
-            "generation": self.generation,
-            "cores": dict(self.cores),
-        }
+        return {"schema": SCHEMA, "message_id": self.message_id, "message_type": self.message_type,
+                "morph_id": self.morph_id, "generation": self.generation, "cores": dict(self.cores)}
 
     @property
     def digest(self) -> str:
-        encoded = json.dumps(self.as_dict(), sort_keys=True, separators=(",", ":")).encode()
-        return hashlib.sha256(encoded).hexdigest()
+        return hashlib.sha256(_encoded(self.as_dict())).hexdigest()
 
 
 def validate_envelope(value: Mapping[str, Any]) -> MorphSernEnvelope:
-    """Validate the exact nine-core control envelope and reject drift."""
-    if set(value) != {"schema", "message_id", "message_type", "morph_id", "generation", "cores"}:
+    if not isinstance(value, dict) or set(value) != {"schema", "message_id", "message_type", "morph_id", "generation", "cores"}:
         raise SernEnvelopeError("INVALID_SHAPE", "envelope fields are not exact")
+    _encoded(value)
     if value["schema"] != SCHEMA:
         raise SernEnvelopeError("UNSUPPORTED_SCHEMA", "schema is not admitted")
     for field in ("message_id", "message_type", "morph_id"):
@@ -68,8 +82,11 @@ def validate_envelope(value: Mapping[str, Any]) -> MorphSernEnvelope:
     cores = value["cores"]
     if not isinstance(cores, Mapping) or tuple(cores.keys()) != NINE_CORES:
         raise SernEnvelopeError("INVALID_CORE_PROJECTION", "all nine ordered cores are required")
-    return MorphSernEnvelope(
-        value["message_id"], value["message_type"], value["morph_id"],
-        value["generation"], dict(cores),
-    )
-
+    identity = cores["identity"]
+    if identity:
+        if not isinstance(identity, dict) or identity.get("morph_id") != value["morph_id"] or identity.get("generation") != value["generation"]:
+            raise SernEnvelopeError("IDENTITY_BINDING_MISMATCH", "identity Core does not bind envelope identity and generation")
+    transport = cores["transport"]
+    if isinstance(transport, dict) and "payload" in transport:
+        raise SernEnvelopeError("TRANSPORT_PAYLOAD_PROHIBITED", "SERN control envelopes may signal transport but never carry a Morph snapshot")
+    return MorphSernEnvelope(value["message_id"], value["message_type"], value["morph_id"], value["generation"], dict(cores))
