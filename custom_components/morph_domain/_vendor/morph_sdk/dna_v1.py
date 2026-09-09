@@ -79,11 +79,17 @@ def validate_lineage_capsule(capsule: dict[str, Any]) -> dict[str, Any]:
     for element in recessives:
         _text(element, "recessive element")
     path = capsule["primary_expression_path"]
-    if not isinstance(path, list) or len(path) != 5 or len(set(path)) != 5:
+    if not isinstance(path, list) or len(path) != 5:
         raise DNAv1Error("INVALID_DNAV1", "exactly five ordered primary expressions are required")
+    for index, expression in enumerate(path):
+        _text(expression, f"primary_expression_path[{index}]")
+    if len(set(path)) != 5:
+        raise DNAv1Error("INVALID_DNAV1", "primary expressions must be unique")
     awakened = capsule["awakened_expression_set"]
     if not isinstance(awakened, list) or not awakened or len(awakened) > 5:
         raise DNAv1Error("INVALID_DNAV1", "awakened expression set is invalid")
+    for index, expression in enumerate(awakened):
+        _text(expression, f"awakened_expression_set[{index}]")
     if not set(awakened).issubset(set(path) | set(recessives)):
         raise DNAv1Error("LINEAGE_EXPRESSION_CONFLICT", "awakened expression is outside birth lineage")
     _exact(capsule["birth_event"], BIRTH_FIELDS, "birth event")
@@ -124,6 +130,14 @@ def validate_lifecycle(state: dict[str, Any]) -> dict[str, Any]:
     tier = state["expression_tier"]
     if type(tier) is not int or not 0 <= tier <= 5:
         raise DNAv1Error("INVALID_LIFECYCLE", "expression tier must be 0..5")
+    if type(state["recessive_revealed"]) is not bool:
+        raise DNAv1Error("INVALID_LIFECYCLE", "recessive_revealed must be boolean")
+    active = state["awakened_active"]
+    if active is not None:
+        _text(active, "awakened_active")
+    available = state["switch_available_at"]
+    if available is not None and (type(available) is not int or available < 0):
+        raise DNAv1Error("INVALID_LIFECYCLE", "switch_available_at must be a nonnegative integer or null")
     if state["phase"] in {"SEALED", "HATCHING"} and tier != 0:
         raise DNAv1Error("LIFECYCLE_EXPRESSION_CONFLICT", "an egg cannot expose expression tiers")
     if state["recessive_revealed"] and state["phase"] not in {"MATURE", "AWAKENED"}:
@@ -203,6 +217,8 @@ def validate_breeding_eligibility(request: dict[str, Any]) -> dict[str, Any]:
     minimum = SOCIAL_STATES.index("FAMILIAR")
     if SOCIAL_STATES.index(request["parent_a_social"]) < minimum or SOCIAL_STATES.index(request["parent_b_social"]) < minimum:
         raise DNAv1Error("BREEDING_FAMILIARITY_REQUIRED", "mutual familiarity is required")
+    if type(request["cooldown_clear"]) is not bool or type(request["consent_admitted"]) is not bool:
+        raise DNAv1Error("INVALID_BREEDING", "cooldown_clear and consent_admitted must be boolean")
     if not request["cooldown_clear"] or not request["consent_admitted"]:
         raise DNAv1Error("BREEDING_NOT_ADMITTED", "cooldown and consent must pass atomically")
     if type(request["nursery_capacity"]) is not int or request["nursery_capacity"] < 1:
