@@ -98,6 +98,18 @@ def test_second_starter_and_existing_morph_fail_closed():
     assert suppressed.value.code == "IMPORT_SUPPRESSES_STARTER"
 
 
+def test_private_serein_founders_do_not_block_public_starter():
+    ledger = empty_ledger()
+    for founder in ("EMBER", "BREEZE", "SENTINEL", "PULSE"):
+        ledger.data["morphs"][founder.lower()] = {"morph_id": founder.lower(), "founder_id": founder}
+    result = origin.create_starter(
+        ledger, request(starter="L1-03"), datetime(2026, 9, 9, 22, 0, tzinfo=UTC)
+    )
+    assert result["state"] == "STARTER_EGG_CREATED"
+    assert result["private_founders_changed"] is False
+    assert len(ledger.data["morphs"]) == 5
+
+
 def test_status_exposes_options_without_creating_more_morphs():
     ledger = empty_ledger()
     before = deepcopy(ledger.data)

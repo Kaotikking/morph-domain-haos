@@ -33,6 +33,7 @@ from .transfer import (
 
 ORIGIN_SCHEMA = "serein.morph-origin.v1"
 STARTERS = {"01": "FIRE", "02": "AIR", "03": "EARTH", "04": "WATER"}
+PRIVATE_SEREIN_FOUNDERS = {"EMBER", "SPARK", "BREEZE", "SENTINEL", "PULSE"}
 
 
 def _iso(now: datetime) -> str:
@@ -136,7 +137,9 @@ def create_starter(ledger: MorphTransferLedger, request: dict[str, Any], now: da
     claims = _starter_operations(ledger)
     if claims:
         raise TransferError("STARTER_ALREADY_CLAIMED", "this installation already has a Legendary starter")
-    if ledger.data["morphs"]:
+    public_or_imported = [morph for morph in ledger.data["morphs"].values()
+                          if str(morph.get("founder_id", "")).upper() not in PRIVATE_SEREIN_FOUNDERS]
+    if public_or_imported:
         raise TransferError("IMPORT_SUPPRESSES_STARTER", "an imported or existing Morph suppresses starter creation")
 
     element_id, element = starter_id[-2:], STARTERS[starter_id[-2:]]
