@@ -86,4 +86,4 @@ def test_morph_engine_nine_core_and_repair_reflex_are_packaged():
     assert '"audio", "personality", "modular", "cloud"' in core_contract
     assert 'world_contract": "MorphDomain"' in engine
     assert 'LEDGER_SCHEMA = "serein.morph-repair-reflex-ledger.v1"' in reflex
-    assert "This change does not rename or replace it" in contract
+    assert "It does not rename, replace, or fork MorphDomain" in contract
