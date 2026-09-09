@@ -103,3 +103,29 @@ def test_all_public_schemas_are_valid_json_and_fail_closed():
         assert schema["properties"]["kind"]["const"] == kind.upper()
         assert schema["properties"]["fixtures"]["minItems"] == 1
 
+
+def test_all_gen1_builtins_are_admitted_and_branch_each_element():
+    raw = json.loads((Path(__file__).parent / "gen1-built-in-packages-v1.json").read_text())
+    admitted = admit_packages(raw["packages"])
+    assert len([p for p in admitted.values() if p["kind"] == "FOUNDER"]) == 4
+    assert len([p for p in admitted.values() if p["kind"] == "EVOLUTION"]) == 16
+    for element in ELEMENTS:
+        classes = {p["payload"]["class"] for p in admitted.values()
+                   if p["kind"] == "EVOLUTION" and p["payload"]["form_id"].startswith(f"FORM-{element}-")}
+        assert classes == set(EVOLUTION_CLASSES)
+
+
+def test_cross_platform_fixture_preserves_truth_and_allows_presentation_difference():
+    raw = json.loads((Path(__file__).parent / "gen1-built-in-packages-v1.json").read_text())
+    fixture = json.loads((Path(__file__).parent / "gen1-cross-platform-v1.json").read_text())
+    admitted = admit_packages(raw["packages"])
+    snapshot = fixture["snapshot"]
+    forms = eligible_forms(lineage_ids=set(snapshot["lineage_ids"]), evidence=snapshot["evidence"],
+                           catalysts=set(snapshot["catalysts"]), packages=admitted)
+    assert list(forms) == fixture["expected"]["eligible_forms"]
+    assert fixture["expected"]["active_owner_count"] == 1
+    low = select_presentation(form_id=forms[0], frame_profile="SERN-LOW", packages=admitted)
+    rich = select_presentation(form_id=forms[0], frame_profile="ANDROID", packages=admitted)
+    assert low["presentation_id"] == rich["presentation_id"]
+    assert low["frame_profile"] != rich["frame_profile"]
+
