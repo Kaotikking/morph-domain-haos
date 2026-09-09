@@ -44,6 +44,8 @@ Version 1.11 makes elapsed-life processing event-driven: the periodic engine sch
 
 Version 1.12 adds bounded, process-local Morph Engine observability: scheduler and API latency, evaluated/advanced Morph counts, storage write decisions, expiry reconciliation, roster size, and Chronicle event count. The dedicated HAOS health sensor exposes only aggregate operational data and never owns or mutates Morph truth.
 
+Version 1.12.1 corrects the periodic scheduler to await its Morph Engine tick on Home Assistant's event loop; thread-dispatched task creation is prohibited by regression test.
+
 See [DNAv1 lineage and lifecycle](docs/DNA-V1-LIFECYCLE.md),
 [Morph Engine nine-Core architecture](docs/MORPH-ENGINE-NINE-CORE.md), and
 [Repair reflex ledger](docs/REPAIR-REFLEX-LEDGER-V1.md).
