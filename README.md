@@ -48,10 +48,13 @@ Version 1.12.1 corrects the periodic scheduler to await its Morph Engine tick on
 
 Version 1.13 locks the Morph World presentation foundation: immutable Gen-1 branch IDs, the nine-core Morph ID Card, care and capability expression resolution, twin-world onboarding, Horizon discovery without creation, and a compact cross-frame presentation ritual. It changes presentation contracts only and does not mutate existing Morph state.
 
+Version 1.14 freezes the Gen-1 package grammar. Founder, Evolution, and Presentation packages are independently admitted; evolution is a catalyst-driven graph distinct from five-level expression; form reversion never erases mastery; and future Frame Armor, combined, and battle classes are reserved but inactive. Four Founder packages, sixteen elemental branch seeds, schema validation, constrained-frame fallback, and cross-platform truth fixtures prove that new content can be added without rewriting the resolver.
+
 See [DNAv1 lineage and lifecycle](docs/DNA-V1-LIFECYCLE.md),
 [Morph Engine nine-Core architecture](docs/MORPH-ENGINE-NINE-CORE.md), and
 [Repair reflex ledger](docs/REPAIR-REFLEX-LEDGER-V1.md), and
-[Morph World presentation foundation](docs/MORPH-WORLD-PRESENTATION-FOUNDATION-V1.md).
+[Morph World presentation foundation](docs/MORPH-WORLD-PRESENTATION-FOUNDATION-V1.md), and
+[Gen-1 package foundation](docs/GEN1-PACKAGE-FOUNDATION-V1.md).
 
 ## Install
 
