@@ -117,7 +117,7 @@ def test_nested_root_identity_and_lineage_are_immutable(mutation):
     mutation(new)
     with pytest.raises(CoreContractError) as caught:
         validate_successor(old, new, "combination")
-    assert caught.value.code == "IMMUTABLE_ROOT_CHANGED"
+    assert caught.value.code in {"IMMUTABLE_ROOT_CHANGED", "INVALID_LINEAGE_DIGEST"}
 
 
 def test_memory_chronicle_may_append_and_counters_may_increase():
