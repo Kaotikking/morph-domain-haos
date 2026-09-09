@@ -92,9 +92,13 @@ async def async_setup_morph_habitat(hass: HomeAssistant) -> None:
         "morph_domain", "morph_care", handle_care,
         schema={"morph_id": str, "action": vol.In(sorted(CARE_ACTIONS))},
     )
+    async def async_tick_habitats(_: Any) -> None:
+        """Run the engine tick on Home Assistant's event loop."""
+        await hass.data[DATA_KEY].tick_habitats()
+
     hass.data[HABITAT_DATA_KEY] = async_track_time_interval(
         hass,
-        lambda _: hass.async_create_task(hass.data[DATA_KEY].tick_habitats()),
+        async_tick_habitats,
         TICK_INTERVAL,
     )
 
