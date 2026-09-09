@@ -4,7 +4,10 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "custom_components/morph_domain"))
 
-from http_policy import action_requires_admin, admin_authorized
+from http_policy import (
+    action_is_read, action_requires_admin, admin_authorized,
+    durable_write_required,
+)
 
 
 @dataclass
@@ -43,3 +46,20 @@ def test_truthy_non_boolean_admin_claim_is_rejected():
         is_admin = 1
 
     assert admin_authorized("habitat", "care", ForgedUser()) is False
+
+
+def test_read_paths_write_only_when_expiry_maintenance_changes_state():
+    for surface, actions in (
+        ("transfer", ("status", "evidence")),
+        ("habitat", ("list", "status", "history")),
+    ):
+        for action in actions:
+            assert action_is_read(surface, action) is True
+            assert durable_write_required(surface, action, False) is False
+            assert durable_write_required(surface, action, True) is True
+
+
+def test_mutations_always_require_a_durable_write():
+    for surface, action in (("transfer", "prepare"), ("habitat", "care")):
+        assert action_is_read(surface, action) is False
+        assert durable_write_required(surface, action, False) is True
