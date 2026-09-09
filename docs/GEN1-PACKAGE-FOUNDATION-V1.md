@@ -50,4 +50,5 @@ Package envelopes use serein.morph-package.v1, an immutable package ID with sema
 
 The golden suite proves four shared elemental lineages and Founder prefixes, drop-in registration of a fifth element/Founder without resolver changes, branching eligibility, expression/evolution separation, safe reversion semantics, drop-in presentation and constrained fallback, reserved future classes, deterministic digests, and duplicate or invalid package rejection.
 
+The built-in registry supplies four Founder packages and sixteen elemental evolution packages: one NATURAL, CONTEXT, RESONANCE, and CULMINATION branch for each primitive element. These are machine-stable branch seeds, not a closed catalog of player-facing bodies. The cross-platform fixture proves identical eligible-form truth with different SERN-LOW and Android presentation profiles.
 
