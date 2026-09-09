@@ -41,9 +41,6 @@ class SernTests(unittest.TestCase):
         self.assertEqual(sern.validate_envelope(value).message_type, "OPEN_TRANSPORT")
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 
     def test_nonfinite_oversize_and_identity_drift_fail_closed(self):
@@ -67,3 +64,6 @@ if __name__ == "__main__":
         value["cores"]["transport"] = {"payload": {"private": "state"}}
         with self.assertRaisesRegex(sern.SernEnvelopeError, "never carry"):
             sern.validate_envelope(value)
+
+if __name__ == "__main__":
+    unittest.main()
