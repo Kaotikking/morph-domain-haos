@@ -6,6 +6,7 @@ import asyncio
 from copy import deepcopy
 from datetime import UTC, datetime
 import json
+from time import perf_counter
 from typing import Any
 
 import voluptuous as vol
@@ -16,6 +17,7 @@ from homeassistant.helpers.storage import Store
 from ._vendor.morph_sdk.transfer import *
 from ._vendor.morph_sdk.transfer import _exact
 from .http_policy import action_is_read, admin_authorized, durable_write_required
+from .runtime_metrics import MorphRuntimeMetrics
 
 # Kept explicit for migration auditing and package-contract readback.
 STORE_KEY = "morph_domain.transfer"
@@ -46,8 +48,10 @@ class MorphTransferManager:
         self.store = Store[dict[str, Any]](hass, STORE_VERSION, STORE_KEY, private=True, atomic_writes=True)
         self.ledger = ledger
         self.lock = asyncio.Lock()
+        self.metrics = MorphRuntimeMetrics()
 
     async def handle(self, action: str, body: dict[str, Any]) -> dict[str, Any]:
+        started = perf_counter()
         from .migration import legacy_engine_enabled
         if action not in {"status", "evidence"} and legacy_engine_enabled(self.hass):
             raise TransferError("ENGINE_CONFLICT", "legacy Morph engine is active")
@@ -55,6 +59,7 @@ class MorphTransferManager:
             now = datetime.now(UTC)
             candidate = MorphTransferLedger(deepcopy(self.ledger.data))
             maintenance_changed = candidate.reconcile_expired(now)
+            self.metrics.record_expiry_reconciliation(changed=maintenance_changed)
             if action == "prepare": result = candidate.prepare_inbound(body, now)
             elif action == "migrate": result = candidate.migrate_to_morph_core(body, now)
             elif action == "inward-bloom": result = candidate.record_inward_bloom(body, now)
@@ -74,12 +79,16 @@ class MorphTransferManager:
                 _exact(body, {"return_id", "snapshot_digest"}, "return commit request")
                 result = candidate.commit_return(str(body["return_id"]), str(body["snapshot_digest"]), now)
             else: raise TransferError("NOT_FOUND", "unknown transfer action")
-            if durable_write_required("transfer", action, maintenance_changed):
+            write_required = durable_write_required("transfer", action, maintenance_changed)
+            if write_required:
                 await self.store.async_save(candidate.data)
                 self.ledger = candidate
+            self.metrics.record_storage_decision(performed=write_required)
+            self.metrics.record_api(started, read=action_is_read("transfer", action))
             return result
 
     async def handle_habitat(self, action: str, body: dict[str, Any]) -> dict[str, Any]:
+        started = perf_counter()
         """Mutate/read habitat state under the same durable authority lock."""
         from .migration import legacy_engine_enabled
         if action not in {"list", "status", "history"} and legacy_engine_enabled(self.hass):
@@ -102,6 +111,7 @@ class MorphTransferManager:
             now = datetime.now(UTC)
             candidate = MorphTransferLedger(deepcopy(self.ledger.data))
             changed = candidate.reconcile_expired(now)
+            self.metrics.record_expiry_reconciliation(changed=changed)
             # The periodic scheduler is the only owner of elapsed-life advancement.
             # Reading the dashboard/API must never advance life or sample HAOS.
             if not action_is_read("habitat", action):
@@ -140,6 +150,8 @@ class MorphTransferManager:
             if changed:
                 await self.store.async_save(candidate.data)
                 self.ledger = candidate
+            self.metrics.record_storage_decision(performed=changed)
+            self.metrics.record_api(started, read=action_is_read("habitat", action))
             return result
 
     async def tick_habitats(self) -> None:
@@ -149,18 +161,27 @@ class MorphTransferManager:
             return
         from .morph_habitat import advance_morph, read_environment, run_automatic_reflexes
 
+        started = perf_counter()
         async with self.lock:
             now = datetime.now(UTC)
             candidate = MorphTransferLedger(deepcopy(self.ledger.data))
             changed = candidate.reconcile_expired(now)
+            self.metrics.record_expiry_reconciliation(changed=changed)
             environment = read_environment(self.hass, now)
+            evaluated = 0
+            advanced = 0
             for morph in candidate.data["morphs"].values():
-                changed = advance_morph(morph, now, environment) or changed
+                evaluated += 1
+                morph_advanced = advance_morph(morph, now, environment)
+                advanced += int(morph_advanced)
+                changed = morph_advanced or changed
             reflex_changed, notices = run_automatic_reflexes(candidate, now)
             changed = reflex_changed or changed
             if changed:
                 await self.store.async_save(candidate.data)
                 self.ledger = candidate
+            self.metrics.record_storage_decision(performed=changed)
+            self.metrics.record_tick(started, evaluated=evaluated, advanced=advanced)
             for notice in notices:
                 if notice["kind"] == "GRADUATED":
                     title, message = "Morph graduated", f"{notice['morph_id']} moved from Nursery to Horizon."
