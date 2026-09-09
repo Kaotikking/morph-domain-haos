@@ -107,3 +107,35 @@ def test_backfill_is_code_haven_plan_with_no_implicit_effect():
     assert plan["required_place"] == "CODE_HAVEN"
     assert plan["effect"] == "NONE_UNTIL_COMMIT"
     assert "authority" in plan["preserve"]
+
+
+def test_lifecycle_rejects_ambiguous_json_types():
+    for field, value in (
+        ("recessive_revealed", 1),
+        ("awakened_active", True),
+        ("switch_available_at", "100"),
+    ):
+        state = lifecycle("AWAKENED", 5)
+        state[field] = value
+        with pytest.raises(DNAv1Error):
+            validate_lifecycle(state)
+
+
+def test_breeding_rejects_truthy_non_boolean_flags():
+    request = {
+        "schema": "serein.morph-breeding-eligibility.v1",
+        "parent_a": "morph:a", "parent_b": "morph:b",
+        "parent_a_phase": "MATURE", "parent_b_phase": "AWAKENED",
+        "parent_a_social": "FAMILIAR", "parent_b_social": "BONDED",
+        "cooldown_clear": 1, "nursery_capacity": 1, "consent_admitted": True,
+    }
+    with pytest.raises(DNAv1Error) as caught:
+        validate_breeding_eligibility(request)
+    assert caught.value.code == "INVALID_BREEDING"
+
+
+def test_expression_paths_require_strings():
+    invalid = capsule()
+    invalid["primary_expression_path"][0] = 1
+    with pytest.raises(DNAv1Error):
+        capsule_digest(invalid)
