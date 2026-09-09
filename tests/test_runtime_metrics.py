@@ -1,6 +1,14 @@
 """Runtime observability remains bounded and outside authoritative Morph state."""
 
-from custom_components.morph_domain.runtime_metrics import MorphRuntimeMetrics
+import importlib.util
+from pathlib import Path
+
+MODULE_PATH = Path(__file__).parents[1] / "custom_components" / "morph_domain" / "runtime_metrics.py"
+SPEC = importlib.util.spec_from_file_location("runtime_metrics", MODULE_PATH)
+assert SPEC and SPEC.loader
+MODULE = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(MODULE)
+MorphRuntimeMetrics = MODULE.MorphRuntimeMetrics
 
 
 def test_runtime_metrics_count_decisions_without_payloads() -> None:
