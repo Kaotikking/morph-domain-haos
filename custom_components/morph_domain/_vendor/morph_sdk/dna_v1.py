@@ -55,6 +55,24 @@ def capsule_digest(capsule: dict[str, Any]) -> str:
     return hashlib.sha256(_canonical(clean)).hexdigest()
 
 
+def validate_lineage_expression_binding(capsule: dict[str, Any], expression: dict[str, Any]) -> dict[str, Any]:
+    """Bind immutable birth lineage to the richer one/two-primitive expression contract."""
+    lineage = validate_lineage_capsule(capsule)
+    from elemental_expression import validate_expression
+
+    validated = validate_expression(
+        expression,
+        generation=0 if not lineage["parent_ids"] else 1,
+        parent_ids=lineage["parent_ids"],
+    )
+    if validated["dominant_primitive"] != lineage["primitive_element"]:
+        raise DNAv1Error("LINEAGE_EXPRESSION_CONFLICT", "expression dominant primitive rewrites birth lineage")
+    secondary = validated["secondary_primitive"]
+    if secondary is not None and secondary not in lineage["recessive_elements"]:
+        raise DNAv1Error("LINEAGE_EXPRESSION_CONFLICT", "secondary primitive is not birth-authorized")
+    return {"lineage": lineage, "expression": validated}
+
+
 def validate_lineage_capsule(capsule: dict[str, Any]) -> dict[str, Any]:
     _exact(capsule, CAPSULE_FIELDS, "lineage capsule")
     if capsule["schema"] != LINEAGE_SCHEMA:
@@ -245,3 +263,4 @@ def code_haven_backfill_plan(existing_core: dict[str, Any], capsule: dict[str, A
         ],
         "effect": "NONE_UNTIL_COMMIT",
     }
+
