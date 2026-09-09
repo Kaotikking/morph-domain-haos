@@ -33,7 +33,8 @@
       "fallback": "SEREIN-CANONICAL-FALLBACK",
       "fixtures": [
         "founder-01"
-      ]
+      ],
+      "content_digest": "5e6b04f7021caf4189b8c655800a3201f35f3af93a1c4dc180468af57b95e86a"
     },
     {
       "schema": "serein.morph-package.v1",
@@ -66,7 +67,7 @@
         ],
         "stability": "STABLE",
         "reversion": "STABLE",
-        "presentation_id": "PRES-GEN1-01",
+        "presentation_id": "PRES-GEN1-CANONICAL",
         "exclusions": [
           "FRAME_ARMOR",
           "COMBINED",
@@ -76,7 +77,8 @@
       "fallback": "SEREIN-CANONICAL-FALLBACK",
       "fixtures": [
         "evolution-01-natural"
-      ]
+      ],
+      "content_digest": "3d0768b1ef989f671bdd832ede3e10fab7e4d006b2c3bb68acefb70ecdee0cda"
     },
     {
       "schema": "serein.morph-package.v1",
@@ -109,7 +111,7 @@
         ],
         "stability": "CONDITIONAL",
         "reversion": "CONTEXT_END",
-        "presentation_id": "PRES-GEN1-01",
+        "presentation_id": "PRES-GEN1-CANONICAL",
         "exclusions": [
           "FRAME_ARMOR",
           "COMBINED",
@@ -119,7 +121,8 @@
       "fallback": "SEREIN-CANONICAL-FALLBACK",
       "fixtures": [
         "evolution-01-context"
-      ]
+      ],
+      "content_digest": "db74d70e129257b4b67b6fcb468bea996759a826532136bd797f510e14277d2d"
     },
     {
       "schema": "serein.morph-package.v1",
@@ -152,7 +155,7 @@
         ],
         "stability": "CONDITIONAL",
         "reversion": "CONTEXT_END",
-        "presentation_id": "PRES-GEN1-01",
+        "presentation_id": "PRES-GEN1-CANONICAL",
         "exclusions": [
           "FRAME_ARMOR",
           "COMBINED",
@@ -162,7 +165,8 @@
       "fallback": "SEREIN-CANONICAL-FALLBACK",
       "fixtures": [
         "evolution-01-resonance"
-      ]
+      ],
+      "content_digest": "55d3cc237be4ca0ad36ab13ec7c04260c0923563324afa755049e444186869e5"
     },
     {
       "schema": "serein.morph-package.v1",
@@ -196,7 +200,7 @@
         ],
         "stability": "STABLE",
         "reversion": "STABLE",
-        "presentation_id": "PRES-GEN1-01",
+        "presentation_id": "PRES-GEN1-CANONICAL",
         "exclusions": [
           "FRAME_ARMOR",
           "COMBINED",
@@ -206,7 +210,8 @@
       "fallback": "SEREIN-CANONICAL-FALLBACK",
       "fixtures": [
         "evolution-01-culmination"
-      ]
+      ],
+      "content_digest": "276f86ed2edfb8cb9489889eb30ed2fb295cfdf98d7ee5364ca9d3d4b4d682d6"
     },
     {
       "schema": "serein.morph-package.v1",
@@ -240,7 +245,8 @@
       "fallback": "SEREIN-CANONICAL-FALLBACK",
       "fixtures": [
         "founder-02"
-      ]
+      ],
+      "content_digest": "88e1520439dc417a5dd1216fc87ad2483a39f4f70515db761a04df0bc4ba75ac"
     },
     {
       "schema": "serein.morph-package.v1",
@@ -273,7 +279,7 @@
         ],
         "stability": "STABLE",
         "reversion": "STABLE",
-        "presentation_id": "PRES-GEN1-02",
+        "presentation_id": "PRES-GEN1-CANONICAL",
         "exclusions": [
           "FRAME_ARMOR",
           "COMBINED",
@@ -283,7 +289,8 @@
       "fallback": "SEREIN-CANONICAL-FALLBACK",
       "fixtures": [
         "evolution-02-natural"
-      ]
+      ],
+      "content_digest": "44e4431eba4f06cb61469d32f5fcd8d504d0bd30714b49581eadc882f71bdf9c"
     },
     {
       "schema": "serein.morph-package.v1",
@@ -316,7 +323,7 @@
         ],
         "stability": "CONDITIONAL",
         "reversion": "CONTEXT_END",
-        "presentation_id": "PRES-GEN1-02",
+        "presentation_id": "PRES-GEN1-CANONICAL",
         "exclusions": [
           "FRAME_ARMOR",
           "COMBINED",
@@ -326,7 +333,8 @@
       "fallback": "SEREIN-CANONICAL-FALLBACK",
       "fixtures": [
         "evolution-02-context"
-      ]
+      ],
+      "content_digest": "dd35822a98ee99f086dc9f3ba02709e97cbe9bafb68ca55f99d68d84ef2f01ac"
     },
     {
       "schema": "serein.morph-package.v1",
@@ -359,7 +367,7 @@
         ],
         "stability": "CONDITIONAL",
         "reversion": "CONTEXT_END",
-        "presentation_id": "PRES-GEN1-02",
+        "presentation_id": "PRES-GEN1-CANONICAL",
         "exclusions": [
           "FRAME_ARMOR",
           "COMBINED",
@@ -369,7 +377,8 @@
       "fallback": "SEREIN-CANONICAL-FALLBACK",
       "fixtures": [
         "evolution-02-resonance"
-      ]
+      ],
+      "content_digest": "4a92bafdd529ffdddcfc40e6c10e9fef5a9578f16dc88d2d8f4a9abcfdbcdc02"
     },
     {
       "schema": "serein.morph-package.v1",
@@ -403,7 +412,7 @@
         ],
         "stability": "STABLE",
         "reversion": "STABLE",
-        "presentation_id": "PRES-GEN1-02",
+        "presentation_id": "PRES-GEN1-CANONICAL",
         "exclusions": [
           "FRAME_ARMOR",
           "COMBINED",
@@ -413,7 +422,8 @@
       "fallback": "SEREIN-CANONICAL-FALLBACK",
       "fixtures": [
         "evolution-02-culmination"
-      ]
+      ],
+      "content_digest": "0ed9a7561f6e1f22c5dbcd01b3568cb87ba84161aa079f186d3f408021ff453d"
     },
     {
       "schema": "serein.morph-package.v1",
@@ -447,7 +457,8 @@
       "fallback": "SEREIN-CANONICAL-FALLBACK",
       "fixtures": [
         "founder-03"
-      ]
+      ],
+      "content_digest": "ab20efff47825d70b0765b48c3a10c0d85df44a752c20ca118a8e79c788e0aa5"
     },
     {
       "schema": "serein.morph-package.v1",
@@ -480,7 +491,7 @@
         ],
         "stability": "STABLE",
         "reversion": "STABLE",
-        "presentation_id": "PRES-GEN1-03",
+        "presentation_id": "PRES-GEN1-CANONICAL",
         "exclusions": [
           "FRAME_ARMOR",
           "COMBINED",
@@ -490,7 +501,8 @@
       "fallback": "SEREIN-CANONICAL-FALLBACK",
       "fixtures": [
         "evolution-03-natural"
-      ]
+      ],
+      "content_digest": "f0deaa3e96ccda7656680c92376ed086be5f07b71353e6b7d1f9462b33da535d"
     },
     {
       "schema": "serein.morph-package.v1",
@@ -523,7 +535,7 @@
         ],
         "stability": "CONDITIONAL",
         "reversion": "CONTEXT_END",
-        "presentation_id": "PRES-GEN1-03",
+        "presentation_id": "PRES-GEN1-CANONICAL",
         "exclusions": [
           "FRAME_ARMOR",
           "COMBINED",
@@ -533,7 +545,8 @@
       "fallback": "SEREIN-CANONICAL-FALLBACK",
       "fixtures": [
         "evolution-03-context"
-      ]
+      ],
+      "content_digest": "112320a0609ab62496d3eb2d9e5894b37dd41f6cc587e5da9a33eb67af0be0be"
     },
     {
       "schema": "serein.morph-package.v1",
@@ -566,7 +579,7 @@
         ],
         "stability": "CONDITIONAL",
         "reversion": "CONTEXT_END",
-        "presentation_id": "PRES-GEN1-03",
+        "presentation_id": "PRES-GEN1-CANONICAL",
         "exclusions": [
           "FRAME_ARMOR",
           "COMBINED",
@@ -576,7 +589,8 @@
       "fallback": "SEREIN-CANONICAL-FALLBACK",
       "fixtures": [
         "evolution-03-resonance"
-      ]
+      ],
+      "content_digest": "f7d321f0836fb240bec40b519763259dcdb6761ad10f21053111de6582f84098"
     },
     {
       "schema": "serein.morph-package.v1",
@@ -610,7 +624,7 @@
         ],
         "stability": "STABLE",
         "reversion": "STABLE",
-        "presentation_id": "PRES-GEN1-03",
+        "presentation_id": "PRES-GEN1-CANONICAL",
         "exclusions": [
           "FRAME_ARMOR",
           "COMBINED",
@@ -620,7 +634,8 @@
       "fallback": "SEREIN-CANONICAL-FALLBACK",
       "fixtures": [
         "evolution-03-culmination"
-      ]
+      ],
+      "content_digest": "76eb0b16dc0cef0ac173ed7607cfb10a81c6a3ab5e7024f90d187eea11963278"
     },
     {
       "schema": "serein.morph-package.v1",
@@ -654,7 +669,8 @@
       "fallback": "SEREIN-CANONICAL-FALLBACK",
       "fixtures": [
         "founder-04"
-      ]
+      ],
+      "content_digest": "f3951389786dbbc6e04b83ea126f8a8016e45b11e246c7023ab1f078c8770bcd"
     },
     {
       "schema": "serein.morph-package.v1",
@@ -687,7 +703,7 @@
         ],
         "stability": "STABLE",
         "reversion": "STABLE",
-        "presentation_id": "PRES-GEN1-04",
+        "presentation_id": "PRES-GEN1-CANONICAL",
         "exclusions": [
           "FRAME_ARMOR",
           "COMBINED",
@@ -697,7 +713,8 @@
       "fallback": "SEREIN-CANONICAL-FALLBACK",
       "fixtures": [
         "evolution-04-natural"
-      ]
+      ],
+      "content_digest": "4aa676b041309a697b7e42e3f7a187d97db1c074dd83cd1e7fa8c7bb44bd26f9"
     },
     {
       "schema": "serein.morph-package.v1",
@@ -730,7 +747,7 @@
         ],
         "stability": "CONDITIONAL",
         "reversion": "CONTEXT_END",
-        "presentation_id": "PRES-GEN1-04",
+        "presentation_id": "PRES-GEN1-CANONICAL",
         "exclusions": [
           "FRAME_ARMOR",
           "COMBINED",
@@ -740,7 +757,8 @@
       "fallback": "SEREIN-CANONICAL-FALLBACK",
       "fixtures": [
         "evolution-04-context"
-      ]
+      ],
+      "content_digest": "000ae6fae68593d34b86560677b783fd79a3c81f9890a6e05fa1f44d3277fe82"
     },
     {
       "schema": "serein.morph-package.v1",
@@ -773,7 +791,7 @@
         ],
         "stability": "CONDITIONAL",
         "reversion": "CONTEXT_END",
-        "presentation_id": "PRES-GEN1-04",
+        "presentation_id": "PRES-GEN1-CANONICAL",
         "exclusions": [
           "FRAME_ARMOR",
           "COMBINED",
@@ -783,7 +801,8 @@
       "fallback": "SEREIN-CANONICAL-FALLBACK",
       "fixtures": [
         "evolution-04-resonance"
-      ]
+      ],
+      "content_digest": "11841cf9492483fc27f8c8e28604f0b5155b5f4e82d7eb180d15f7475e1a58d4"
     },
     {
       "schema": "serein.morph-package.v1",
@@ -817,7 +836,7 @@
         ],
         "stability": "STABLE",
         "reversion": "STABLE",
-        "presentation_id": "PRES-GEN1-04",
+        "presentation_id": "PRES-GEN1-CANONICAL",
         "exclusions": [
           "FRAME_ARMOR",
           "COMBINED",
@@ -827,7 +846,8 @@
       "fallback": "SEREIN-CANONICAL-FALLBACK",
       "fixtures": [
         "evolution-04-culmination"
-      ]
+      ],
+      "content_digest": "2fe0bab16f30cdfe852d9c69f29dc95c96a0fdf51cd87d6c7e113953dd9a60d0"
     },
     {
       "schema": "serein.morph-package.v1",
@@ -901,7 +921,8 @@
       "fixtures": [
         "presentation-constrained",
         "presentation-android"
-      ]
+      ],
+      "content_digest": "06c9f037f81036d2be0d6086862fd510c36c0eb7682013607e7c0a319f042602"
     }
   ]
 }
