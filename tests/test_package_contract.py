@@ -1,7 +1,6 @@
 import json
 from pathlib import Path
 
-
 ROOT = Path(__file__).parents[1]
 COMPONENT = ROOT / "custom_components" / "morph_domain"
 
@@ -11,7 +10,7 @@ def test_hacs_layout_and_manifest():
     hacs = json.loads((ROOT / "hacs.json").read_text())
     assert manifest["domain"] == "morph_domain"
     assert manifest["config_flow"] is True
-    assert manifest["version"] == "1.4.0"
+    assert manifest["version"] == "1.5.0"
     assert manifest["documentation"].startswith("https://github.com/")
     assert manifest["issue_tracker"].startswith("https://github.com/")
     assert manifest["codeowners"]
@@ -43,6 +42,7 @@ def test_routes_are_public_versioned_morphdomain_routes():
     text += (COMPONENT / "morph_habitat.py").read_text()
     assert 'url = "/api/morph-domain/v1/transfer/{action}"' in text
     assert 'url = "/api/morph-domain/v1/habitat/{action}"' in text
+    assert 'url = "/api/morph-domain/v1/sern/validate"' in text
     assert 'action == "register-axis"' in text
     assert 'action == "advance-axis"' in text
     assert 'url = "/api/serein/' not in text
@@ -64,5 +64,4 @@ def test_morph_first_operator_panel_is_packaged():
     assert 'PLACES=["VOID","NURSERY","SEREIN_GARDENS","HORIZON","CODE_HAVEN"]' in panel
     assert 'class="locations"' in panel
     assert 'class="morph-stage"' in panel
-
 
