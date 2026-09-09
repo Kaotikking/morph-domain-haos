@@ -10,7 +10,7 @@ def test_hacs_layout_and_manifest():
     hacs = json.loads((ROOT / "hacs.json").read_text())
     assert manifest["domain"] == "morph_domain"
     assert manifest["config_flow"] is True
-    assert manifest["version"] == "1.12.0"
+    assert manifest["version"] == "1.12.1"
     assert manifest["documentation"].startswith("https://github.com/")
     assert manifest["issue_tracker"].startswith("https://github.com/")
     assert manifest["codeowners"]
@@ -97,3 +97,10 @@ def test_dashboard_reads_do_not_own_life_advancement_or_unconditional_writes():
     assert 'durable_write_required("transfer", action, maintenance_changed)' in adapter
     assert "The periodic scheduler is the only owner of elapsed-life advancement." in adapter
     assert "reads persist only real maintenance changes" in policy
+
+
+def test_scheduler_awaits_tick_on_home_assistant_event_loop():
+    habitat = (COMPONENT / "morph_habitat.py").read_text()
+    assert "async def async_tick_habitats" in habitat
+    assert "await hass.data[DATA_KEY].tick_habitats()" in habitat
+    assert "lambda _: hass.async_create_task" not in habitat
