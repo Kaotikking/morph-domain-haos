@@ -46,9 +46,12 @@ Version 1.12 adds bounded, process-local Morph Engine observability: scheduler a
 
 Version 1.12.1 corrects the periodic scheduler to await its Morph Engine tick on Home Assistant's event loop; thread-dispatched task creation is prohibited by regression test.
 
+Version 1.13 locks the Morph World presentation foundation: immutable Gen-1 branch IDs, the nine-core Morph ID Card, care and capability expression resolution, twin-world onboarding, Horizon discovery without creation, and a compact cross-frame presentation ritual. It changes presentation contracts only and does not mutate existing Morph state.
+
 See [DNAv1 lineage and lifecycle](docs/DNA-V1-LIFECYCLE.md),
 [Morph Engine nine-Core architecture](docs/MORPH-ENGINE-NINE-CORE.md), and
-[Repair reflex ledger](docs/REPAIR-REFLEX-LEDGER-V1.md).
+[Repair reflex ledger](docs/REPAIR-REFLEX-LEDGER-V1.md), and
+[Morph World presentation foundation](docs/MORPH-WORLD-PRESENTATION-FOUNDATION-V1.md).
 
 ## Install
 
