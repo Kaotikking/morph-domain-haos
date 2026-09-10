@@ -143,3 +143,35 @@ def test_status_exposes_options_without_creating_more_morphs():
     assert sum(row["horizon_state"] == "CHOSEN" for row in status["options"]) == 1
     assert sum(row["horizon_state"] == "UNDISCOVERED" for row in status["options"]) == 3
 
+
+def test_hatch_reveals_one_stable_pool_a_name_and_preserves_identity():
+    ledger = empty_ledger()
+    born = datetime(2026, 9, 9, 22, 0, tzinfo=UTC)
+    created = origin.create_starter(ledger, request(starter="L1-04"), born)
+    morph_id = created["morph_id"]
+    before = deepcopy(ledger.data["morphs"][morph_id])
+    hatch_request = {"schema": origin.ORIGIN_SCHEMA, "event_id": "hatch-water-1", "morph_id": morph_id}
+    first = origin.hatch_starter(ledger, hatch_request, datetime(2026, 9, 12, 22, 0, tzinfo=UTC))
+    assert first["state"] == "HATCHED"
+    assert first["element"] == "WATER"
+    assert first["display_name"] in origin.hatch_name.__globals__["pool"]("WATER", "A")
+    assert origin.hatch_starter(ledger, hatch_request, datetime(2026, 9, 12, 22, 1, tzinfo=UTC)) == first
+    after = ledger.data["morphs"][morph_id]
+    for field in ("morph_id", "founder_id", "device_birth_lineage", "generation", "genome", "genome_sha256"):
+        assert after[field] == before[field]
+    assert after["presentation"]["display_name"] == first["display_name"]
+    assert after["snapshot"]["payload"]["morph_core"]["platform"]["embodiment"]["body_class"] == "morph-juvenile"
+
+
+def test_hatch_rejects_changed_replay_and_second_hatch():
+    ledger = empty_ledger()
+    created = origin.create_starter(ledger, request(starter="L1-01"), datetime(2026, 9, 9, 22, 0, tzinfo=UTC))
+    req = {"schema": origin.ORIGIN_SCHEMA, "event_id": "hatch-fire-1", "morph_id": created["morph_id"]}
+    origin.hatch_starter(ledger, req, datetime(2026, 9, 12, 22, 0, tzinfo=UTC))
+    with pytest.raises(transfer.TransferError) as changed:
+        origin.hatch_starter(ledger, {**req, "morph_id": "other"}, datetime(2026, 9, 12, 22, 1, tzinfo=UTC))
+    assert changed.value.code == "REPLAY_CONFLICT"
+    with pytest.raises(transfer.TransferError) as second:
+        origin.hatch_starter(ledger, {**req, "event_id": "hatch-fire-2"}, datetime(2026, 9, 12, 22, 1, tzinfo=UTC))
+    assert second.value.code == "ALREADY_HATCHED"
+
