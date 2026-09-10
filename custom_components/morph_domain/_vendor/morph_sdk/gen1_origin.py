@@ -30,6 +30,7 @@ from .transfer import (
     refresh_snapshot,
     sha256_json,
 )
+from .word_pools_v1 import hatch_name
 
 ORIGIN_SCHEMA = "serein.morph-origin.v1"
 STARTERS = {"01": "FIRE", "02": "AIR", "03": "EARTH", "04": "WATER"}
@@ -194,5 +195,50 @@ def create_starter(ledger: MorphTransferLedger, request: dict[str, Any], now: da
         "installation_id": installation_id, "morph_id": morph_id,
         "place": "NURSERY", "created_at": born_at, "result": deepcopy(result),
     }
+    return result
+
+
+def hatch_starter(ledger: MorphTransferLedger, request: dict[str, Any], now: datetime) -> dict[str, Any]:
+    """Reveal and permanently name one Gen-1 Legendary egg."""
+    _exact(request, {"schema", "event_id", "morph_id"}, "hatch request")
+    if request["schema"] != ORIGIN_SCHEMA:
+        raise TransferError("INVALID_SCHEMA", "hatch request schema is not admitted")
+    event_id, morph_id = str(request["event_id"]), str(request["morph_id"])
+    if not event_id or not morph_id:
+        raise TransferError("INVALID_HATCH", "hatch identity is required")
+    existing = ledger.data["operations"].get(event_id)
+    if existing:
+        if existing.get("operation_kind") != "GEN1_STARTER_HATCH" or existing.get("morph_id") != morph_id:
+            raise TransferError("REPLAY_CONFLICT", "hatch event id payload changed")
+        return deepcopy(existing["result"])
+    morph = ledger.data["morphs"].get(morph_id)
+    if not morph or str(morph.get("founder_id", "")) not in {f"L1-{x}" for x in STARTERS}:
+        raise TransferError("INVALID_HATCH", "Gen-1 Legendary egg was not found")
+    core = morph["snapshot"]["payload"]["morph_core"]
+    if morph.get("authority") != "HAOS" or core["cloud"]["place"] != "NURSERY":
+        raise TransferError("HATCH_PRESTATE_MISMATCH", "HAOS Nursery custody is required")
+    if core["platform"]["embodiment"]["body_class"] != "morph-egg":
+        raise TransferError("ALREADY_HATCHED", "Morph is no longer an egg")
+    element = core["root"]["identity"]["primitive_element"]
+    display_name = hatch_name(morph_id=morph_id, genome_sha256=morph["genome_sha256"], element=element)
+    observed_at = _iso(now)
+    evidence_digest = hashlib.sha256(canonical_json({"event_id": event_id, "morph_id": morph_id,
+                                                     "display_name": display_name}).encode()).hexdigest()
+    core["platform"]["embodiment"] = {"body_id": f"legendary-{element.lower()}-juvenile",
+        "body_class": "morph-juvenile", "capabilities": ["care", "interact"]}
+    core["ui"]["expression"] = "juvenile"
+    core["modular"]["capabilities"] = ["care", "interact"]
+    core["memory"]["chronicle"]["events"].append({"event_id": event_id, "kind": "starter-hatch",
+        "observed_at": observed_at, "source": "haos-morphdomain", "place": "NURSERY",
+        "frame": "haos-nursery", "evidence_digest": evidence_digest})
+    validate_nine_core(core)
+    morph["presentation"] = {"display_name": display_name, "name_source": "POOL_A",
+                             "name_version": "gen1-word-pools-v1", "named_at": observed_at}
+    refresh_snapshot(morph)
+    result = {"schema": ORIGIN_SCHEMA, "state": "HATCHED", "morph_id": morph_id,
+              "display_name": display_name, "element": element, "place": "NURSERY",
+              "snapshot_digest": morph["snapshot_digest"], "authority": "HAOS"}
+    ledger.data["operations"][event_id] = {"operation_kind": "GEN1_STARTER_HATCH", "state": "COMMITTED",
+        "event_id": event_id, "morph_id": morph_id, "created_at": observed_at, "result": deepcopy(result)}
     return result
 
