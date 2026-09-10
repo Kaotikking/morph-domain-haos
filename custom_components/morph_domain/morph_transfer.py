@@ -107,7 +107,7 @@ class MorphTransferManager:
             register_founder_axis,
             advance_founder_axis,
         )
-        from ._vendor.morph_sdk.gen1_origin import create_starter, starter_status
+        from ._vendor.morph_sdk.gen1_origin import create_starter, hatch_starter, starter_status
 
         async with self.lock:
             now = datetime.now(UTC)
@@ -128,6 +128,9 @@ class MorphTransferManager:
                 result = starter_status(candidate)
             elif action == "starter-create":
                 result = create_starter(candidate, body, now)
+                changed = True
+            elif action == "starter-hatch":
+                result = hatch_starter(candidate, body, now)
                 changed = True
             elif action == "status":
                 _exact(body, {"morph_id"}, "habitat status request")
