@@ -169,11 +169,22 @@ def test_habitat_status_does_not_reconcile_advance_or_save():
     assert obj.ledger.data == {"morphs": {}, "operations": {}}
 
 
+def test_habitat_list_does_not_reconcile_advance_or_save():
+    obj = manager()
+    result = asyncio.run(obj.handle_habitat("list", {}))
+    assert result == {"morphs": []}
+    assert obj.store.writes == 0
+    assert obj.ledger.reconciliations == 0
+    assert obj.ledger.data == {"morphs": {}, "operations": {}}
+
+
 def test_get_routes_require_authentication_and_bind_exact_id():
     assert module.MorphTransferStatusView.requires_auth is True
     assert module.MorphTransferStatusView.url.endswith("/{transfer_id}")
     assert habitat_module.MorphHabitatStatusView.requires_auth is True
     assert habitat_module.MorphHabitatStatusView.url.endswith("/{morph_id}")
+    assert habitat_module.MorphHabitatListView.requires_auth is True
+    assert habitat_module.MorphHabitatListView.url.endswith("/list")
 
 
 def test_get_routes_use_existing_pure_status_actions():
@@ -187,6 +198,10 @@ def test_get_routes_use_existing_pure_status_actions():
     habitat_view.json = lambda payload, status_code=200: (status_code, payload)
     status, payload = asyncio.run(habitat_view.get(request, "dustdevil"))
     assert status == 200 and payload["result"]["morph_id"] == "dustdevil"
+    list_view = habitat_module.MorphHabitatListView()
+    list_view.json = lambda payload, status_code=200: (status_code, payload)
+    status, payload = asyncio.run(list_view.get(request))
+    assert status == 200 and payload["result"] == {"morphs": []}
     assert obj.store.writes == 0
     assert obj.ledger.reconciliations == 0
 
