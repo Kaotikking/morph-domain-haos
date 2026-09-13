@@ -48,7 +48,7 @@ def test_truthy_non_boolean_admin_claim_is_rejected():
     assert admin_authorized("habitat", "care", ForgedUser()) is False
 
 
-def test_read_paths_write_only_when_expiry_maintenance_changes_state():
+def test_read_paths_never_write_even_if_maintenance_change_is_reported():
     for surface, actions in (
         ("transfer", ("status", "evidence")),
         ("habitat", ("list", "status", "history")),
@@ -56,7 +56,7 @@ def test_read_paths_write_only_when_expiry_maintenance_changes_state():
         for action in actions:
             assert action_is_read(surface, action) is True
             assert durable_write_required(surface, action, False) is False
-            assert durable_write_required(surface, action, True) is True
+            assert durable_write_required(surface, action, True) is False
 
 
 def test_mutations_always_require_a_durable_write():
