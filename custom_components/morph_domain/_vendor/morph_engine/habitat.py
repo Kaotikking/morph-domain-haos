@@ -345,18 +345,7 @@ def run_automatic_reflexes(
             changed = True
             sealed_egg = False
 
-        hatch_events = core.get("memory", {}).get("chronicle", {}).get("events", [])
-        hatch_at = next((event.get("observed_at") for event in reversed(hatch_events)
-                         if event.get("kind") == "starter-hatch"), None)
-        starter_ready = False
-        if starter and hatch_at:
-            starter_ready = now.astimezone(UTC) >= (
-                datetime.fromisoformat(hatch_at.replace("Z", "+00:00"))
-                + NURSERY_GRADUATION
-            )
-        if (habitat["place"] == "NURSERY"
-                and not sealed_egg
-                and (starter_ready if starter else elapsed_ready)):
+        if (habitat["place"] == "NURSERY" and not sealed_egg and elapsed_ready):
             event_id = f"auto-graduate:{morph_id}:{habitat['entered_at']}"
             if event_id not in habitat["event_ids"]:
                 previous = habitat["place"]
