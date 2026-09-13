@@ -183,6 +183,7 @@ def test_starter_egg_auto_hatches_names_then_graduates_at_72_hours():
     born = datetime(2026, 9, 9, 22, 0, tzinfo=UTC)
     created = origin.create_starter(ledger, request(starter="L1-04"), born)
     morph = ledger.data["morphs"][created["morph_id"]]
+    habitat.habitat_status(ledger, created["morph_id"], born)
     state = morph["habitat"]
     identity = (morph["morph_id"], morph["founder_id"], morph["device_birth_lineage"], morph["generation"])
     state["nursery_elapsed_seconds"] = 72 * 60 * 60 - 30
