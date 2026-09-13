@@ -36,6 +36,7 @@ def load(name):
 transfer = load("_vendor/morph_sdk/transfer")
 origin = load("_vendor/morph_sdk/gen1_origin")
 core_contract = load("_vendor/morph_sdk/morph_core")
+habitat = load("_vendor/morph_engine/habitat")
 
 
 def request(starter="L1-02", event="starter-claim-1"):
@@ -175,3 +176,32 @@ def test_hatch_rejects_changed_replay_and_second_hatch():
         origin.hatch_starter(ledger, {**req, "event_id": "hatch-fire-2"}, datetime(2026, 9, 12, 22, 1, tzinfo=UTC))
     assert second.value.code == "ALREADY_HATCHED"
 
+
+
+def test_sealed_starter_egg_waits_in_nursery_past_72_hours_until_hatch():
+    ledger = empty_ledger()
+    born = datetime(2026, 9, 9, 22, 0, tzinfo=UTC)
+    created = origin.create_starter(ledger, request(starter="L1-04"), born)
+    morph = ledger.data["morphs"][created["morph_id"]]
+    state = morph["habitat"]
+    state["nursery_elapsed_seconds"] = 72 * 60 * 60
+    identity = (morph["morph_id"], morph["founder_id"], morph["device_birth_lineage"], morph["generation"])
+    before_digest = morph["snapshot_digest"]
+
+    changed, notices = habitat.run_automatic_reflexes(ledger, born)
+    assert changed is False
+    assert notices == []
+    assert state["place"] == "NURSERY"
+    assert morph["snapshot_digest"] == before_digest
+    assert state["reflex"]["graduated_at"] is None
+
+    hatched = origin.hatch_starter(ledger, {
+        "schema": origin.ORIGIN_SCHEMA, "event_id": "hatch-water-after-wait",
+        "morph_id": morph["morph_id"],
+    }, born)
+    assert hatched["state"] == "HATCHED"
+    changed, notices = habitat.run_automatic_reflexes(ledger, born)
+    assert changed is True
+    assert [notice["kind"] for notice in notices] == ["GRADUATED"]
+    assert state["place"] == "HORIZON"
+    assert identity == (morph["morph_id"], morph["founder_id"], morph["device_birth_lineage"], morph["generation"])
