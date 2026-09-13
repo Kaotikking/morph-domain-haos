@@ -15,6 +15,7 @@ from ..morph_sdk.transfer import (
     refresh_snapshot,
 )
 from ..morph_sdk.morph_core import MORPH_NINE_CORE_SCHEMA
+from ..morph_sdk.gen1_origin import ORIGIN_SCHEMA, hatch_starter
 from ..morph_sdk.presentation import (
     PresentationError, bind_presentation, change_presentation, neutral_presentation,
 )
@@ -333,9 +334,29 @@ def run_automatic_reflexes(
         if not embodiment:
             embodiment = core.get("embodiment", {})
         sealed_egg = embodiment.get("body_class") == "morph-egg"
+        starter = str(morph.get("founder_id", "")) in {"L1-01", "L1-02", "L1-03", "L1-04"}
+        elapsed_ready = int(habitat["nursery_elapsed_seconds"]) >= int(NURSERY_GRADUATION.total_seconds())
+        if habitat["place"] == "NURSERY" and starter and sealed_egg and elapsed_ready:
+            hatch_id = f"auto-hatch:{morph_id}"
+            hatch_starter(ledger, {
+                "schema": ORIGIN_SCHEMA, "event_id": hatch_id, "morph_id": morph_id,
+            }, now)
+            notices.append({"id": hatch_id, "kind": "HATCHED", "morph_id": morph_id})
+            changed = True
+            sealed_egg = False
+
+        hatch_events = core.get("memory", {}).get("chronicle", {}).get("events", [])
+        hatch_at = next((event.get("observed_at") for event in reversed(hatch_events)
+                         if event.get("kind") == "starter-hatch"), None)
+        starter_ready = False
+        if starter and hatch_at:
+            starter_ready = now.astimezone(UTC) >= (
+                datetime.fromisoformat(hatch_at.replace("Z", "+00:00"))
+                + NURSERY_GRADUATION
+            )
         if (habitat["place"] == "NURSERY"
                 and not sealed_egg
-                and int(habitat["nursery_elapsed_seconds"]) >= int(NURSERY_GRADUATION.total_seconds())):
+                and (starter_ready if starter else elapsed_ready)):
             event_id = f"auto-graduate:{morph_id}:{habitat['entered_at']}"
             if event_id not in habitat["event_ids"]:
                 previous = habitat["place"]
