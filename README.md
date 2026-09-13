@@ -69,6 +69,7 @@ Copy `custom_components/morph_domain` into Home Assistant, restart, then add
 - `POST /api/morph-domain/v1/habitat/{action}`
 - `GET /api/morph-domain/v1/transfer/status/{transfer_id}`
 - `GET /api/morph-domain/v1/habitat/status/{morph_id}`
+- `GET /api/morph-domain/v1/habitat/list` (read the roster before selecting a Morph ID)
 
 The authenticated GET status routes are strictly observational: they do not
 advance life, reconcile expired transfers, or write Morph storage. Existing
@@ -94,6 +95,5 @@ MorphDomain refuses to run beside an enabled legacy engine. Reconcile every
 Morph through the MorphDomain API before changing place or authority, and never
 enable both engines concurrently. Private Morph state remains for recovery or
 reinstall; uninstall never deletes it.
-
 
 
