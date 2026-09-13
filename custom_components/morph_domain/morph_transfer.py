@@ -24,6 +24,19 @@ from .runtime_metrics import MorphRuntimeMetrics
 STORE_KEY = "morph_domain.transfer"
 LEGACY_STORE_KEY = "serein_gateway.morph_transfer"
 
+def reflex_notice_content(notice: dict[str, str]) -> tuple[str, str]:
+    """Fail closed on unknown reflex kinds instead of sending a false diagnosis."""
+    kind = notice["kind"]
+    morph_id = notice["morph_id"]
+    if kind == "HATCHED":
+        return "Morph hatched", f"{morph_id} hatched and received a name in Nursery."
+    if kind == "GRADUATED":
+        return "Morph graduated", f"{morph_id} moved from Nursery to Horizon."
+    if kind == "INTERVENTION":
+        return "Morph needs Code Haven review", f"{morph_id} is isolated in Code Haven for Operator review."
+    raise ValueError(f"unknown Morph reflex notice kind: {kind}")
+
+
 class MorphTransferView(HomeAssistantView):
     url = "/api/morph-domain/v1/transfer/{action}"
     name = "api:morph-domain:v1:transfer"
@@ -214,10 +227,7 @@ class MorphTransferManager:
             self.metrics.record_storage_decision(performed=changed)
             self.metrics.record_tick(started, evaluated=evaluated, advanced=advanced)
             for notice in notices:
-                if notice["kind"] == "GRADUATED":
-                    title, message = "Morph graduated", f"{notice['morph_id']} moved from Nursery to Horizon."
-                else:
-                    title, message = "Morph needs Code Haven review", f"{notice['morph_id']} is isolated in Code Haven for Operator review."
+                title, message = reflex_notice_content(notice)
                 await self.hass.services.async_call(
                     "persistent_notification", "create",
                     {"notification_id": notice["id"], "title": title, "message": message},

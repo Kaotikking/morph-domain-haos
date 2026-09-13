@@ -489,3 +489,18 @@ def test_expired_v3_return_restores_haos_core_authority_with_valid_digest():
     assert morph["snapshot"]["payload"]["morph_core"]["state"]["authority"] == "HAOS_ACTIVE"
     transfer.validate_snapshot(morph["snapshot"])
 
+
+def test_hatch_notification_never_masquerades_as_code_haven_intervention():
+    hatch = transfer.reflex_notice_content({"kind": "HATCHED", "morph_id": "water-egg"})
+    graduation = transfer.reflex_notice_content({"kind": "GRADUATED", "morph_id": "water-egg"})
+    intervention = transfer.reflex_notice_content({"kind": "INTERVENTION", "morph_id": "water-egg"})
+    assert hatch[0] == "Morph hatched"
+    assert "Code Haven" not in hatch[0] + hatch[1]
+    assert graduation[0] == "Morph graduated"
+    assert intervention[0] == "Morph needs Code Haven review"
+    try:
+        transfer.reflex_notice_content({"kind": "UNKNOWN", "morph_id": "water-egg"})
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("unknown reflex kind generated a notification")

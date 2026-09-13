@@ -1,5 +1,5 @@
 from copy import deepcopy
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 import importlib.util
 from pathlib import Path
 import sys
@@ -36,6 +36,7 @@ def load(name):
 transfer = load("_vendor/morph_sdk/transfer")
 origin = load("_vendor/morph_sdk/gen1_origin")
 core_contract = load("_vendor/morph_sdk/morph_core")
+habitat = load("_vendor/morph_engine/habitat")
 
 
 def request(starter="L1-02", event="starter-claim-1"):
@@ -175,3 +176,42 @@ def test_hatch_rejects_changed_replay_and_second_hatch():
         origin.hatch_starter(ledger, {**req, "event_id": "hatch-fire-2"}, datetime(2026, 9, 12, 22, 1, tzinfo=UTC))
     assert second.value.code == "ALREADY_HATCHED"
 
+
+
+def test_starter_egg_auto_hatches_names_then_graduates_at_72_hours():
+    ledger = empty_ledger()
+    born = datetime(2026, 9, 9, 22, 0, tzinfo=UTC)
+    created = origin.create_starter(ledger, request(starter="L1-04"), born)
+    morph = ledger.data["morphs"][created["morph_id"]]
+    habitat.habitat_status(ledger, created["morph_id"], born)
+    state = morph["habitat"]
+    identity = (morph["morph_id"], morph["founder_id"], morph["device_birth_lineage"], morph["generation"])
+    state["nursery_elapsed_seconds"] = 72 * 60 * 60 - 30
+    before_digest = morph["snapshot_digest"]
+
+    changed, notices = habitat.run_automatic_reflexes(ledger, born)
+    assert changed is False
+    assert notices == []
+    assert state["place"] == "NURSERY"
+    assert morph["snapshot_digest"] == before_digest
+
+    assert habitat.advance_morph(morph, born + timedelta(seconds=30)) is True
+    assert state["nursery_elapsed_seconds"] == 72 * 60 * 60
+    restored = transfer.MorphTransferLedger(deepcopy(ledger.data))
+    morph = restored.data["morphs"][created["morph_id"]]
+    state = morph["habitat"]
+    changed, notices = habitat.run_automatic_reflexes(restored, born + timedelta(seconds=30))
+    assert changed is True
+    assert [notice["kind"] for notice in notices] == ["HATCHED", "GRADUATED"]
+    assert state["place"] == "HORIZON"
+    assert morph["snapshot"]["payload"]["morph_core"]["platform"]["embodiment"]["body_class"] == "morph-juvenile"
+    hatch_receipt = restored.data["operations"][f"auto-hatch:{morph['morph_id']}"]["result"]
+    assert hatch_receipt["display_name"] in origin.hatch_name.__globals__["pool"]("WATER", "A")
+    assert morph["presentation"]["display_name"] == hatch_receipt["display_name"]
+    events = morph["snapshot"]["payload"]["morph_core"]["memory"]["chronicle"]["events"]
+    assert [event["kind"] for event in events][-1] == "starter-hatch"
+    assert identity == (morph["morph_id"], morph["founder_id"], morph["device_birth_lineage"], morph["generation"])
+
+    repeat_changed, repeat_notices = habitat.run_automatic_reflexes(restored, born + timedelta(seconds=30))
+    assert repeat_changed is False
+    assert repeat_notices == []
