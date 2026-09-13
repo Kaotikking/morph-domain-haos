@@ -326,7 +326,15 @@ def run_automatic_reflexes(
         habitat = _habitat(morph, now)
         reflex = habitat["reflex"]
 
+        # A sealed egg must remain in Nursery until its explicit hatch transaction.
+        # The elapsed nursery clock is preserved; it cannot substitute for hatching.
+        core = morph.get("snapshot", {}).get("payload", {}).get("morph_core", {})
+        embodiment = core.get("platform", {}).get("embodiment", {})
+        if not embodiment:
+            embodiment = core.get("embodiment", {})
+        sealed_egg = embodiment.get("body_class") == "morph-egg"
         if (habitat["place"] == "NURSERY"
+                and not sealed_egg
                 and int(habitat["nursery_elapsed_seconds"]) >= int(NURSERY_GRADUATION.total_seconds())):
             event_id = f"auto-graduate:{morph_id}:{habitat['entered_at']}"
             if event_id not in habitat["event_ids"]:
