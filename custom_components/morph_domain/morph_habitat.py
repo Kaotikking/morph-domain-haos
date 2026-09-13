@@ -79,11 +79,28 @@ class MorphHabitatStatusView(HomeAssistantView):
             return self.json({"ok": False, "error": {"code": err.code, "message": str(err)}}, status_code=409)
 
 
+class MorphHabitatListView(HomeAssistantView):
+    """Authenticated, side-effect-free roster for resolving canonical Morph IDs."""
+
+    url = "/api/morph-domain/v1/habitat/list"
+    name = "api:morph-domain:v1:habitat:list:get"
+    requires_auth = True
+
+    async def get(self, request: Any) -> Any:
+        manager: MorphTransferManager = request.app["hass"].data[DATA_KEY]
+        try:
+            result = await manager.handle_habitat("list", {})
+            return self.json({"ok": True, "result": result})
+        except TransferError as err:
+            return self.json({"ok": False, "error": {"code": err.code, "message": str(err)}}, status_code=409)
+
+
 async def async_setup_morph_habitat(hass: HomeAssistant) -> None:
     if HABITAT_DATA_KEY in hass.data:
         return
     hass.http.register_view(MorphHabitatView)
     hass.http.register_view(MorphHabitatStatusView)
+    hass.http.register_view(MorphHabitatListView)
     hass.http.register_view(MorphSernView)
     async def handle_place(call: Any) -> None:
         await hass.data[DATA_KEY].handle_habitat("place", {
@@ -118,4 +135,3 @@ async def async_setup_morph_habitat(hass: HomeAssistant) -> None:
         async_tick_habitats,
         TICK_INTERVAL,
     )
-
