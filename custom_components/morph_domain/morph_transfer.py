@@ -43,6 +43,22 @@ class MorphTransferView(HomeAssistantView):
             return self.json({"ok": False, "error": {"code": "INVALID_REQUEST", "message": "request is invalid"}}, status_code=400)
 
 
+class MorphTransferStatusView(HomeAssistantView):
+    """Authenticated status read without transfer maintenance or storage writes."""
+
+    url = "/api/morph-domain/v1/transfer/status/{transfer_id}"
+    name = "api:morph-domain:v1:transfer:status:get"
+    requires_auth = True
+
+    async def get(self, request: Any, transfer_id: str) -> Any:
+        manager: MorphTransferManager = request.app["hass"].data[DATA_KEY]
+        try:
+            result = await manager.handle("status", {"transfer_id": transfer_id})
+            return self.json({"ok": True, "result": result})
+        except TransferError as err:
+            return self.json({"ok": False, "error": {"code": err.code, "message": str(err)}}, status_code=409)
+
+
 class MorphTransferManager:
     def __init__(self, hass: HomeAssistant, ledger: MorphTransferLedger) -> None:
         self.hass = hass
@@ -59,7 +75,9 @@ class MorphTransferManager:
         async with self.lock:
             now = datetime.now(UTC)
             candidate = MorphTransferLedger(deepcopy(self.ledger.data))
-            maintenance_changed = candidate.reconcile_expired(now)
+            # Reads observe the last durable state; only the scheduler or a
+            # mutation may reconcile expirations and persist a successor.
+            maintenance_changed = False if action_is_read("transfer", action) else candidate.reconcile_expired(now)
             self.metrics.record_expiry_reconciliation(changed=maintenance_changed)
             if action == "prepare": result = candidate.prepare_inbound(body, now)
             elif action == "migrate": result = candidate.migrate_to_morph_core(body, now)
@@ -112,7 +130,9 @@ class MorphTransferManager:
         async with self.lock:
             now = datetime.now(UTC)
             candidate = MorphTransferLedger(deepcopy(self.ledger.data))
-            changed = candidate.reconcile_expired(now)
+            # A habitat read must not advance time, expire an operation, or
+            # save any Morph state. The scheduler owns elapsed-life work.
+            changed = False if action_is_read("habitat", action) else candidate.reconcile_expired(now)
             self.metrics.record_expiry_reconciliation(changed=changed)
             # The periodic scheduler is the only owner of elapsed-life advancement.
             # Reading the dashboard/API must never advance life or sample HAOS.
@@ -232,6 +252,7 @@ async def async_setup_morph_transfer(hass: HomeAssistant) -> None:
     manager.store = store
     hass.data[DATA_KEY] = manager
     hass.http.register_view(MorphTransferView)
+    hass.http.register_view(MorphTransferStatusView)
 
 
 
