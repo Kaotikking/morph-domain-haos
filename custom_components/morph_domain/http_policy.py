@@ -30,6 +30,6 @@ def action_is_read(surface: str, action: str) -> bool:
 
 
 def durable_write_required(surface: str, action: str, maintenance_changed: bool) -> bool:
-    """Mutations always persist; reads persist only real maintenance changes."""
-    return not action_is_read(surface, action) or maintenance_changed
+    """Only mutation actions persist; a read never becomes maintenance."""
+    return not action_is_read(surface, action)
 

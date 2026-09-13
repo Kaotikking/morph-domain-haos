@@ -67,6 +67,17 @@ Copy `custom_components/morph_domain` into Home Assistant, restart, then add
 
 - `POST /api/morph-domain/v1/transfer/{action}`
 - `POST /api/morph-domain/v1/habitat/{action}`
+- `GET /api/morph-domain/v1/transfer/status/{transfer_id}`
+- `GET /api/morph-domain/v1/habitat/status/{morph_id}`
+- `GET /api/morph-domain/v1/habitat/list` (read the roster before selecting a Morph ID)
+
+The authenticated GET status routes are strictly observational: they do not
+advance life, reconcile expired transfers, or write Morph storage. Existing
+POST `status`, `list`, `history`, and `evidence` reads have the same no-write
+semantics for compatibility. The periodic engine tick and admitted mutation
+actions retain expiry reconciliation. A status read reports the last durable
+state, which can change on the next engine tick; it never manufactures that
+change itself.
 
 Consumer-beta origin actions are `starter-status` (read-only) and `starter-create` (administrator-only). The dashboard presents the four public elemental choices only while a clean installation is eligible. Creation is a real durable Morph transaction, not a fixture.
 
@@ -84,6 +95,5 @@ MorphDomain refuses to run beside an enabled legacy engine. Reconcile every
 Morph through the MorphDomain API before changing place or authority, and never
 enable both engines concurrently. Private Morph state remains for recovery or
 reinstall; uninstall never deletes it.
-
 
 
