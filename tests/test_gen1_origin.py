@@ -178,14 +178,14 @@ def test_hatch_rejects_changed_replay_and_second_hatch():
 
 
 
-def test_sealed_starter_egg_waits_in_nursery_past_72_hours_until_hatch():
+def test_starter_egg_auto_hatches_names_then_graduates_at_72_hours():
     ledger = empty_ledger()
     born = datetime(2026, 9, 9, 22, 0, tzinfo=UTC)
     created = origin.create_starter(ledger, request(starter="L1-04"), born)
     morph = ledger.data["morphs"][created["morph_id"]]
     state = morph["habitat"]
-    state["nursery_elapsed_seconds"] = 72 * 60 * 60
     identity = (morph["morph_id"], morph["founder_id"], morph["device_birth_lineage"], morph["generation"])
+    state["nursery_elapsed_seconds"] = 72 * 60 * 60 - 30
     before_digest = morph["snapshot_digest"]
 
     changed, notices = habitat.run_automatic_reflexes(ledger, born)
@@ -193,15 +193,20 @@ def test_sealed_starter_egg_waits_in_nursery_past_72_hours_until_hatch():
     assert notices == []
     assert state["place"] == "NURSERY"
     assert morph["snapshot_digest"] == before_digest
-    assert state["reflex"]["graduated_at"] is None
 
-    hatched = origin.hatch_starter(ledger, {
-        "schema": origin.ORIGIN_SCHEMA, "event_id": "hatch-water-after-wait",
-        "morph_id": morph["morph_id"],
-    }, born)
-    assert hatched["state"] == "HATCHED"
+    state["nursery_elapsed_seconds"] = 72 * 60 * 60
     changed, notices = habitat.run_automatic_reflexes(ledger, born)
     assert changed is True
-    assert [notice["kind"] for notice in notices] == ["GRADUATED"]
+    assert [notice["kind"] for notice in notices] == ["HATCHED", "GRADUATED"]
     assert state["place"] == "HORIZON"
+    assert morph["snapshot"]["payload"]["morph_core"]["platform"]["embodiment"]["body_class"] == "morph-juvenile"
+    hatch_receipt = ledger.data["operations"][f"auto-hatch:{morph['morph_id']}"]["result"]
+    assert hatch_receipt["display_name"] in origin.hatch_name.__globals__["pool"]("WATER", "A")
+    assert morph["presentation"]["display_name"] == hatch_receipt["display_name"]
+    events = morph["snapshot"]["payload"]["morph_core"]["memory"]["chronicle"]["events"]
+    assert [event["kind"] for event in events][-1] == "starter-hatch"
     assert identity == (morph["morph_id"], morph["founder_id"], morph["device_birth_lineage"], morph["generation"])
+
+    repeat_changed, repeat_notices = habitat.run_automatic_reflexes(ledger, born)
+    assert repeat_changed is False
+    assert repeat_notices == []
