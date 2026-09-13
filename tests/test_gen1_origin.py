@@ -1,5 +1,5 @@
 from copy import deepcopy
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 import importlib.util
 from pathlib import Path
 import sys
@@ -195,19 +195,23 @@ def test_starter_egg_auto_hatches_names_then_graduates_at_72_hours():
     assert state["place"] == "NURSERY"
     assert morph["snapshot_digest"] == before_digest
 
-    state["nursery_elapsed_seconds"] = 72 * 60 * 60
-    changed, notices = habitat.run_automatic_reflexes(ledger, born)
+    assert habitat.advance_morph(morph, born + timedelta(seconds=30)) is True
+    assert state["nursery_elapsed_seconds"] == 72 * 60 * 60
+    restored = transfer.MorphTransferLedger(deepcopy(ledger.data))
+    morph = restored.data["morphs"][created["morph_id"]]
+    state = morph["habitat"]
+    changed, notices = habitat.run_automatic_reflexes(restored, born + timedelta(seconds=30))
     assert changed is True
     assert [notice["kind"] for notice in notices] == ["HATCHED", "GRADUATED"]
     assert state["place"] == "HORIZON"
     assert morph["snapshot"]["payload"]["morph_core"]["platform"]["embodiment"]["body_class"] == "morph-juvenile"
-    hatch_receipt = ledger.data["operations"][f"auto-hatch:{morph['morph_id']}"]["result"]
+    hatch_receipt = restored.data["operations"][f"auto-hatch:{morph['morph_id']}"]["result"]
     assert hatch_receipt["display_name"] in origin.hatch_name.__globals__["pool"]("WATER", "A")
     assert morph["presentation"]["display_name"] == hatch_receipt["display_name"]
     events = morph["snapshot"]["payload"]["morph_core"]["memory"]["chronicle"]["events"]
     assert [event["kind"] for event in events][-1] == "starter-hatch"
     assert identity == (morph["morph_id"], morph["founder_id"], morph["device_birth_lineage"], morph["generation"])
 
-    repeat_changed, repeat_notices = habitat.run_automatic_reflexes(ledger, born)
+    repeat_changed, repeat_notices = habitat.run_automatic_reflexes(restored, born + timedelta(seconds=30))
     assert repeat_changed is False
     assert repeat_notices == []
