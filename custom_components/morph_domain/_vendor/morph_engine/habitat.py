@@ -327,8 +327,8 @@ def run_automatic_reflexes(
         habitat = _habitat(morph, now)
         reflex = habitat["reflex"]
 
-        # A sealed egg must remain in Nursery until its explicit hatch transaction.
-        # The elapsed nursery clock is preserved; it cannot substitute for hatching.
+        # A sealed egg stays in Nursery until the canonical hatch transaction.
+        # The 72-hour clock triggers that transaction before Horizon graduation.
         core = morph.get("snapshot", {}).get("payload", {}).get("morph_core", {})
         embodiment = core.get("platform", {}).get("embodiment", {})
         if not embodiment:
