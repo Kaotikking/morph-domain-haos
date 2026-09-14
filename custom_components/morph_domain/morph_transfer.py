@@ -105,6 +105,9 @@ class MorphTransferManager:
                 if set(body) not in ({"transfer_id"}, {"return_id"}, {"transfer_id", "include_snapshot"}, {"return_id", "include_snapshot"}):
                     raise TransferError("INVALID_SCHEMA", "status request fields are not exact")
                 result = candidate.status(str(body.get("transfer_id") or body.get("return_id")), include_snapshot=bool(body.get("include_snapshot")))
+            elif action == "current-snapshot":
+                _exact(body, {"morph_id"}, "current snapshot request")
+                result = candidate.current_snapshot(str(body["morph_id"]))
             elif action == "evidence":
                 _exact(body, {"operation_id"}, "evidence request")
                 result = candidate.evidence_bundle(str(body["operation_id"]))

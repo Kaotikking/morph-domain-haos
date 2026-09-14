@@ -40,6 +40,7 @@ MODULAR_FIELDS = {"capabilities"}
 CLOUD_FIELDS = {"place", "authority", "active_frame", "needs_q8", "reconciliation"}
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9._:-]{0,127}$")
 DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
+UNKNOWN = "UNKNOWN"
 
 
 class MorphCoreError(ValueError):
@@ -54,8 +55,16 @@ def _exact(value: dict[str, Any], fields: set[str], name: str) -> None:
 
 
 def _id(value: Any, name: str) -> None:
-    if not isinstance(value, str) or not ID_RE.fullmatch(value):
+    if not isinstance(value, str) or value.upper() == UNKNOWN or not ID_RE.fullmatch(value):
         raise MorphCoreError("INVALID_MORPH_CORE", f"{name} is invalid")
+
+
+def _id_or_unknown(value: Any, name: str) -> bool:
+    """Admit explicit UMP uncertainty only for non-identity provenance slots."""
+    if value == UNKNOWN:
+        return True
+    _id(value, name)
+    return False
 
 
 def _timestamp(value: Any) -> None:
@@ -318,7 +327,8 @@ def validate_morph_core(core: dict[str, Any]) -> dict[str, Any]:
     _bounded_map(state["needs_q8"], 255, "needs_q8")
     for field in ("mood", "expression"): _id(state[field], field)
     _exact(embodiment, EMBODIMENT_FIELDS, "embodiment")
-    for field in ("body_id", "body_class"): _id(embodiment[field], field)
+    for field in ("body_id", "body_class"):
+        _id_or_unknown(embodiment[field], field)
     if not isinstance(embodiment["capabilities"], list) or len(embodiment["capabilities"]) > 32:
         raise MorphCoreError("INVALID_MORPH_CORE", "capabilities are invalid")
     for capability in embodiment["capabilities"]: _id(capability, "capability")
@@ -360,4 +370,3 @@ def verify_successor(previous: dict[str, Any], candidate: dict[str, Any]) -> Non
                 raise MorphCoreError("LIFE_REGRESSION", f"{field}.{key} regressed")
     if new_events[:len(old_events)] != old_events:
         raise MorphCoreError("CHRONICLE_REWRITE", "Living Code Chronicle is append-only")
-

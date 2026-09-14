@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import sys
 import types
+import pytest
 
 ROOT = Path(__file__).parents[1]
 PACKAGE = ROOT / "custom_components/morph_domain"
@@ -580,3 +581,130 @@ def test_hatch_notification_never_masquerades_as_code_haven_intervention():
         pass
     else:
         raise AssertionError("unknown reflex kind generated a notification")
+
+
+def test_ump_unknown_nonancestry_provenance_preserves_normal_habitat():
+    now = datetime.now(UTC)
+    core = hosted_v3(now).data["morphs"]["pulse"]["snapshot"]["payload"]["morph_core"]
+    core["embodiment"]["body_id"] = "UNKNOWN"
+    core["embodiment"]["body_class"] = "UNKNOWN"
+    core["state"]["place"] = "CODE_HAVEN"
+    transfer.validate_morph_core(core)
+    core["state"]["place"] = "HORIZON"
+    transfer.validate_morph_core(core)
+
+
+def test_nine_core_unknown_nonancestry_provenance_preserves_normal_habitat():
+    now = datetime.now(UTC)
+    ledger, _ = aligned_in_code_haven(now)
+    core = ledger.data["morphs"]["pulse"]["snapshot"]["payload"]["morph_core"]
+    core["platform"]["embodiment"]["body_class"] = "UNKNOWN"
+    transfer.validate_morph_core(core)
+    core["cloud"]["place"] = "HORIZON"
+    transfer.validate_morph_core(core)
+
+
+def test_unknown_cannot_replace_identity_or_element():
+    core = hosted_v3(datetime.now(UTC)).data["morphs"]["pulse"]["snapshot"]["payload"]["morph_core"]
+    core["state"]["place"] = "CODE_HAVEN"
+    for field in ("morph_id", "founder_lineage", "device_birth_lineage"):
+        original = core["identity"][field]
+        core["identity"][field] = "UNKNOWN"
+        try:
+            transfer.validate_morph_core(core)
+        except transfer.MorphCoreError:
+            pass
+        else:
+            raise AssertionError(f"unknown {field} admitted")
+        core["identity"][field] = original
+    core["identity"]["primitive_element"] = "UNKNOWN"
+    try:
+        transfer.validate_morph_core(core)
+    except transfer.MorphCoreError:
+        pass
+    else:
+        raise AssertionError("unknown primitive granted ancestry")
+
+
+def test_unknown_genome_version_is_a_dna_hold_not_normal_admission():
+    core = hosted_v3(datetime.now(UTC)).data["morphs"]["pulse"]["snapshot"]["payload"]["morph_core"]
+    core["identity"]["genome_version"] = "UNKNOWN"
+    for place in ("CODE_HAVEN", "HORIZON"):
+        core["state"]["place"] = place
+        try:
+            transfer.validate_morph_core(core)
+        except transfer.MorphCoreError:
+            pass
+        else:
+            raise AssertionError("unknown DNA version admitted as known")
+
+
+def test_legacy_founder_migration_preserves_life_with_unknown_body():
+    now = datetime(2026, 9, 14, tzinfo=UTC)
+    ledger = hosted(now)
+    morph = ledger.data["morphs"]["pulse"]
+    before = json.loads(json.dumps(morph["snapshot"]["payload"]))
+    core = json.loads(json.dumps(hosted_v3(now).data["morphs"]["pulse"]["snapshot"]["payload"]["morph_core"]))
+    core["identity"]["genome_version"] = "dnav1"
+    core["state"]["place"] = "CODE_HAVEN"
+    core["state"]["active_frame"] = "haos-code-haven"
+    core["embodiment"]["body_id"] = "UNKNOWN"
+    core["embodiment"]["body_class"] = "UNKNOWN"
+    event_id = "migration:legacy-founder:test"
+    core["chronicle"]["events"] = [{
+        "event_id": event_id, "kind": "migration", "observed_at": now.isoformat(),
+        "source": "haos-code-haven", "place": "CODE_HAVEN",
+        "frame": "haos-code-haven", "evidence_digest": "a" * 64,
+    }]
+    payload = {**before, "engine_extension": {
+        "schema": transfer.ANDROID_EXTENSION_SCHEMA, "payload": {},
+        "sha256": hashlib.sha256(canonical({}).encode()).hexdigest(),
+    }, "morph_core": core}
+    candidate = {"schema": transfer.MORPH_CORE_LIFE_SCHEMA, "payload": payload,
+                 "sha256": hashlib.sha256(canonical(payload).encode()).hexdigest()}
+    request = {
+        "schema": transfer.MORPH_CORE_MIGRATION_SCHEMA, "migration_id": event_id,
+        "morph_id": morph["morph_id"], "founder_id": morph["founder_id"],
+        "device_birth_lineage": morph["device_birth_lineage"],
+        "genome_sha256": morph["genome_sha256"], "source_frame": morph["source_frame"],
+        "current_authority": morph["authority"], "generation": morph["generation"],
+        "predecessor_snapshot_digest": morph["snapshot_digest"],
+        "created_at": now.isoformat(), "actor": "haos-code-haven",
+        "reason": "source-backed legacy founder compatibility", "evidence_digest": "a" * 64,
+        "snapshot": candidate,
+    }
+    receipt = ledger.migrate_to_morph_core(request, now)
+    after = ledger.data["morphs"]["pulse"]
+    assert receipt["operation_state"] == "MIGRATED"
+    assert all(after["snapshot"]["payload"][key] == value for key, value in before.items())
+    assert after["morph_id"] == morph["morph_id"]
+    assert after["generation"] == morph["generation"]
+    assert after["authority"] == morph["authority"]
+
+
+def test_current_snapshot_read_is_admin_only_exact_and_no_write():
+    policy = load("http_policy")
+    assert policy.action_is_read("transfer", "current-snapshot")
+    assert policy.action_requires_admin("transfer", "current-snapshot")
+    assert not policy.durable_write_required("transfer", "current-snapshot", False)
+    now = datetime(2026, 9, 14, tzinfo=UTC)
+    ledger = hosted(now)
+    morph = ledger.data["morphs"]["pulse"]
+    before = canonical(ledger.data)
+    receipt = ledger.current_snapshot("pulse")
+    assert receipt["snapshot"] == morph["snapshot"]
+    assert receipt["snapshot_digest"] == morph["snapshot_digest"]
+    assert receipt["genome_sha256"] == morph["genome_sha256"]
+    assert "genome" not in receipt
+    assert canonical(ledger.data) == before
+    receipt["snapshot"]["payload"]["food_q8"] = 0
+    assert canonical(ledger.data) == before
+
+
+def test_current_snapshot_denies_corrupt_durable_digest():
+    now = datetime(2026, 9, 14, tzinfo=UTC)
+    ledger = hosted(now)
+    ledger.data["morphs"]["pulse"]["snapshot_digest"] = "0" * 64
+    with pytest.raises(Exception) as error:
+        ledger.current_snapshot("pulse")
+    assert getattr(error.value, "code", None) == "SNAPSHOT_CONFLICT"

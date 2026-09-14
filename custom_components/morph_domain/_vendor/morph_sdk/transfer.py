@@ -650,6 +650,21 @@ class MorphTransferLedger:
         op["committed_at"] = now.astimezone(UTC).isoformat().replace("+00:00", "Z")
         return self.status(return_id)
 
+    def current_snapshot(self, morph_id: str) -> dict[str, Any]:
+        """Admin-only adapter readback of the exact current durable checkpoint."""
+        morph = self.data["morphs"].get(morph_id)
+        if morph is None:
+            raise TransferError("NOT_FOUND", "Morph is not admitted")
+        if not hmac.compare_digest(validate_snapshot(morph["snapshot"]), morph["snapshot_digest"]):
+            raise TransferError("SNAPSHOT_CONFLICT", "durable snapshot digest does not match")
+        result = {key: deepcopy(morph[key]) for key in (
+            "morph_id", "founder_id", "device_birth_lineage", "source_frame",
+            "authority", "generation", "genome_sha256", "snapshot_digest", "snapshot",
+        )}
+        result["schema"] = "serein.morph-current-snapshot.v1"
+        result["receipt_digest"] = sha256_json(result)
+        return result
+
     def status(self, transfer_id: str, include_snapshot: bool = False) -> dict[str, Any]:
         op = self._op(transfer_id)
         result = {key: op[key] for key in ("schema", "transfer_id", "morph_id", "snapshot_digest", "generation") if key in op}
