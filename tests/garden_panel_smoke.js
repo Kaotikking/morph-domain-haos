@@ -37,6 +37,7 @@ panel.render();
 assert.ok(panel.shadowRoot.innerHTML.includes('aria-label="P&#117;lse"'));
 assert.match(panel.shadowRoot.innerHTML, /data-care="FEED"/);
 assert.match(panel.shadowRoot.innerHTML, /data-move="HORIZON"/);
+assert.match(panel.shadowRoot.innerHTML, /\.detail>\.morph-actions\{order:-1\}/);
 assert.equal(panel.element(morph), "WATER");
 assert.match(panel.morph(morph), /water lineage/);
 assert.doesNotMatch(panel.morph(morph), /earth lineage/);
