@@ -8,7 +8,7 @@ let Panel;
 globalThis.HTMLElement = class {
   setAttribute(name, value) { this[name] = value; }
   attachShadow() {
-    this.shadowRoot = { innerHTML: "", querySelectorAll: () => [], querySelector: () => null };
+    this.shadowRoot = { innerHTML: "", querySelectorAll: () => [], querySelector: () => null, addEventListener: () => {} };
     return this.shadowRoot;
   }
 };
@@ -35,6 +35,15 @@ panel.selected = "pulse";
 panel.loading = false;
 panel.render();
 assert.ok(panel.shadowRoot.innerHTML.includes('aria-label="P&#117;lse"'));
+assert.match(panel.shadowRoot.innerHTML, /data-care="FEED"/);
+assert.match(panel.shadowRoot.innerHTML, /data-move="HORIZON"/);
+assert.equal(panel.element(morph), "WATER");
+assert.match(panel.morph(morph), /water lineage/);
+assert.doesNotMatch(panel.morph(morph), /earth lineage/);
+assert.match(panel.silhouette("WATER", 1), /M90 17/);
+assert.match(panel.silhouette("AIR", 1), /M38 139/);
+assert.match(panel.silhouette("FIRE", 1), /M91 18/);
+assert.match(panel.silhouette("EARTH", 1), /M51 40/);
 assert.match(panel.shadowRoot.innerHTML, /Matching · 4×4/);
 assert.match(panel.shadowRoot.innerHTML, /Which hand\?/);
 assert.match(panel.shadowRoot.innerHTML, /Follow the pattern/);
@@ -76,6 +85,12 @@ assert.equal(panel.status(panel.rows[0]), "riding air currents");
 assert.match(panel.morph(panel.rows[0]), /riding air c&#117;rrents/);
 panel.render();
 assert.match(panel.shadowRoot.innerHTML, /riding air c&#117;rrents/);
+assert.match(panel.shadowRoot.innerHTML, /data-care="FEED"/);
+assert.match(panel.shadowRoot.innerHTML, /data-move="SEREIN_GARDENS"/);
+const egg = { ...morph, morph_id: "egg", founder_id: "L1-04", life: { morph_core: { ui: { expression: "egg" } } } };
+assert.equal(panel.isEgg(egg), true);
+assert.match(panel.morph(egg), /Unknown egg/);
+assert.doesNotMatch(panel.actions(egg), /data-care="FEED"/);
 panel.place = "SEREIN_GARDENS";
 panel.rows[0].place = "SEREIN_GARDENS";
 panel.game = null;
@@ -83,8 +98,24 @@ panel.rows[0].games = [{ game_id: "resume-1", morph_id: "pulse", game: "MATCHING
   board: Array(16).fill(null), turn: 1, score: 0, finished: false, rewarded: false }];
 panel._hass = { callApi: async (method, route) => route.endsWith("starter-status")
   ? { result: {} } : { result: { morphs: panel.rows } } };
-panel.refresh().then(() => {
+panel.refresh().then(async () => {
   assert.equal(panel.game.game_id, "resume-1");
   assert.equal((panel.shadowRoot.innerHTML.match(/data-game-tile=/g) || []).length, 16);
+  const calls = [];
+  panel._hass = { callApi: async (method, route, body) => {
+    calls.push({ method, route, body });
+    return route.endsWith("starter-status") ? { result: {} } : { result: { morphs: panel.rows } };
+  } };
+  await panel.actOnMorph("care", "FEED");
+  assert.equal(calls[0].route, "morph-domain/v1/habitat/care");
+  assert.equal(calls[0].body.action, "FEED");
+  calls.length = 0;
+  await panel.actOnMorph("move", "NURSERY");
+  assert.equal(calls[0].route, "morph-domain/v1/habitat/place");
+  assert.equal(calls[0].body.place, "NURSERY");
+  calls.length = 0;
+  await panel.actOnMorph("move", "VOID");
+  assert.equal(calls.length, 0, "Void requires a second tap");
   console.log("Gardens panel smoke PASS");
 }).catch(error => { console.error(error.message); process.exitCode = 1; });
+
