@@ -29,6 +29,7 @@ from .transfer import (
     canonical_json,
     refresh_snapshot,
     sha256_json,
+    append_nine_core_event,
 )
 from .word_pools_v1 import hatch_name
 
@@ -228,7 +229,7 @@ def hatch_starter(ledger: MorphTransferLedger, request: dict[str, Any], now: dat
         "body_class": "morph-juvenile", "capabilities": ["care", "interact"]}
     core["ui"]["expression"] = "juvenile"
     core["modular"]["capabilities"] = ["care", "interact"]
-    core["memory"]["chronicle"]["events"].append({"event_id": event_id, "kind": "starter-hatch",
+    append_nine_core_event(morph, {"event_id": event_id, "kind": "starter-hatch",
         "observed_at": observed_at, "source": "haos-morphdomain", "place": "NURSERY",
         "frame": "haos-nursery", "evidence_digest": evidence_digest})
     validate_nine_core(core)
@@ -241,4 +242,3 @@ def hatch_starter(ledger: MorphTransferLedger, request: dict[str, Any], now: dat
     ledger.data["operations"][event_id] = {"operation_kind": "GEN1_STARTER_HATCH", "state": "COMMITTED",
         "event_id": event_id, "morph_id": morph_id, "created_at": observed_at, "result": deepcopy(result)}
     return result
-

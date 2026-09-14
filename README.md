@@ -52,6 +52,8 @@ Version 1.14 freezes the Gen-1 package grammar. Founder, Evolution, and Presenta
 
 Version 1.16 adds the fail-closed consumer-beta origin gate. A fresh installation receives one durable installation identity and may create exactly one parentless L1 Legendary egg in Nursery. Existing/imported Morphs suppress starter creation, exact retries are idempotent, changed replays fail closed, and the three unchosen public elemental lineages remain Horizon discoveries. Private Serein Founders are never created or modified by this path.
 
+Version 1.19 adds bounded Horizon and Gardens interactions, a single-ledger SERN/UMP event reducer, and a logical ten-domain review router. The router boots only after the HAOS private Morph Store is loaded, follows Kernel then the nine Core order, and denies unlisted or wrong-caller routes. It does not create a second Morph database. This is **in-process policy separation**, not SFOS-equivalent process isolation or an independently admitted SereinNet EVT pipeline. The five Morph locations remain world places, not additional domains.
+
 See [DNAv1 lineage and lifecycle](docs/DNA-V1-LIFECYCLE.md),
 [Morph Engine nine-Core architecture](docs/MORPH-ENGINE-NINE-CORE.md), and
 [Repair reflex ledger](docs/REPAIR-REFLEX-LEDGER-V1.md), and
@@ -95,5 +97,4 @@ MorphDomain refuses to run beside an enabled legacy engine. Reconcile every
 Morph through the MorphDomain API before changing place or authority, and never
 enable both engines concurrently. Private Morph state remains for recovery or
 reinstall; uninstall never deletes it.
-
 

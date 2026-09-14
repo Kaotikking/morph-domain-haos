@@ -54,6 +54,8 @@ LEGACY_STORE_KEY = "serein_gateway.morph_transfer"
 STORE_VERSION = 1
 DATA_KEY = "morph_domain_transfer"
 MAX_SNAPSHOT_BYTES = 131072
+PORTABLE_CHRONICLE_EVENT_LIMIT = 128
+PORTABLE_SNAPSHOT_RESERVE_BYTES = 32768
 LIFE_FIELDS = {"saved_epoch_seconds", "behavior", "arousal_q8", "security_q8",
                "curiosity_q8", "social_q8", "fatigue_q8", "food_q8", "water_q8",
                "play_q8", "rest_q8", "attention_q8", "memories"}
@@ -78,6 +80,58 @@ def canonical_json(value: Any) -> str:
 
 def sha256_json(value: Any) -> str:
     return hashlib.sha256(canonical_json(value).encode()).hexdigest()
+
+
+def append_nine_core_event(morph: dict[str, Any], event: dict[str, Any]) -> None:
+    """Append once, retaining later history in the sole HAOS Morph ledger."""
+    core = morph["snapshot"]["payload"]["morph_core"]
+    if core.get("schema") != "serein.morph-nine-core.v1":
+        core["chronicle"]["events"].append(deepcopy(event))
+        return
+    events = core["memory"]["chronicle"]["events"]
+    learned = core["knowledge"]["learned"]
+    habitat = morph.setdefault("habitat", {})
+    archive = habitat.get("chronicle_archive")
+    marker = learned.get("chronicle_archive")
+    projected = deepcopy(morph["snapshot"])
+    projected["payload"]["morph_core"]["memory"]["chronicle"]["events"].append(deepcopy(event))
+    if (archive is None and marker is None and len(events) < PORTABLE_CHRONICLE_EVENT_LIMIT
+            and len(canonical_json(projected).encode())
+            <= MAX_SNAPSHOT_BYTES - PORTABLE_SNAPSHOT_RESERVE_BYTES):
+        if any(row.get("event_id") == event.get("event_id") for row in events):
+            raise TransferError("REPLAY_CONFLICT", "chronicle event id already exists")
+        events.append(deepcopy(event))
+        return
+    base_digest = sha256_json(events)
+    if archive is None:
+        if marker is not None:
+            raise TransferError("ARCHIVE_INTEGRITY_FAILED", "archive history is missing")
+        archive = {"schema": "serein.morph-chronicle-archive.v1", "base_digest": base_digest, "rows": []}
+        habitat["chronicle_archive"] = archive
+    if archive.get("schema") != "serein.morph-chronicle-archive.v1" or archive.get("base_digest") != base_digest:
+        raise TransferError("ARCHIVE_INTEGRITY_FAILED", "archive base differs from portable life")
+    rows = archive.get("rows")
+    if not isinstance(rows, list):
+        raise TransferError("ARCHIVE_INTEGRITY_FAILED", "archive rows are invalid")
+    previous = base_digest
+    seen = {row["event_id"] for row in events}
+    for sequence, row in enumerate(rows, 1):
+        payload = row.get("event")
+        if not isinstance(payload, dict) or payload.get("event_id") in seen:
+            raise TransferError("ARCHIVE_INTEGRITY_FAILED", "archive event is invalid")
+        digest = hashlib.sha256((previous + "\n" + canonical_json(payload)).encode()).hexdigest()
+        if row.get("sequence") != sequence or row.get("previous_digest") != previous or row.get("digest") != digest:
+            raise TransferError("ARCHIVE_INTEGRITY_FAILED", "archive chain is invalid")
+        seen.add(payload["event_id"])
+        previous = digest
+    if marker != ({"count": len(rows), "head_sha256": previous} if rows else None):
+        raise TransferError("ARCHIVE_INTEGRITY_FAILED", "portable archive marker differs")
+    if event.get("event_id") in seen:
+        raise TransferError("REPLAY_CONFLICT", "chronicle event id already exists")
+    digest = hashlib.sha256((previous + "\n" + canonical_json(event)).encode()).hexdigest()
+    rows.append({"sequence": len(rows) + 1, "event": deepcopy(event),
+                 "previous_digest": previous, "digest": digest})
+    learned["chronicle_archive"] = {"count": len(rows), "head_sha256": digest}
 
 
 def _exact(value: dict[str, Any], fields: set[str], name: str) -> None:
@@ -522,8 +576,7 @@ class MorphTransferLedger:
             raise TransferError("NONCANONICAL_REPAIR", "requested primitive is not canonical for this founder")
         predecessor_snapshot = deepcopy(morph["snapshot"])
         identity["primitive_element"] = canonical
-        chronicle = core["memory"]["chronicle"] if core.get("schema") == "serein.morph-nine-core.v1" else core["chronicle"]
-        chronicle["events"].append({
+        append_nine_core_event(morph, {
             "event_id": repair_id, "kind": "lineage-correction",
             "observed_at": request["created_at"], "source": request["actor"],
             "place": "CODE_HAVEN", "frame": "haos-code-haven",
@@ -690,4 +743,3 @@ class MorphTransferLedger:
             return self.data["operations"][str(transfer_id)]
         except KeyError as err:
             raise TransferError("NOT_FOUND", "transfer operation not found") from err
-

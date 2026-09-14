@@ -24,6 +24,19 @@ from .runtime_metrics import MorphRuntimeMetrics
 STORE_KEY = "morph_domain.transfer"
 LEGACY_STORE_KEY = "serein_gateway.morph_transfer"
 
+def reflex_notice_content(notice: dict[str, str]) -> tuple[str, str]:
+    """Fail closed on unknown reflex kinds instead of sending a false diagnosis."""
+    kind = notice["kind"]
+    morph_id = notice["morph_id"]
+    if kind == "HATCHED":
+        return "Morph hatched", f"{morph_id} hatched and received a name in Nursery."
+    if kind == "GRADUATED":
+        return "Morph graduated", f"{morph_id} moved from Nursery to Horizon."
+    if kind == "INTERVENTION":
+        return "Morph needs Code Haven review", f"{morph_id} is isolated in Code Haven for Operator review."
+    raise ValueError(f"unknown Morph reflex notice kind: {kind}")
+
+
 class MorphTransferView(HomeAssistantView):
     url = "/api/morph-domain/v1/transfer/{action}"
     name = "api:morph-domain:v1:transfer"
@@ -61,11 +74,13 @@ class MorphTransferStatusView(HomeAssistantView):
 
 class MorphTransferManager:
     def __init__(self, hass: HomeAssistant, ledger: MorphTransferLedger) -> None:
+        from ._vendor.morph_engine.haos_runtime import build_haos_runtime
         self.hass = hass
         self.store = Store[dict[str, Any]](hass, STORE_VERSION, STORE_KEY, private=True, atomic_writes=True)
         self.ledger = ledger
         self.lock = asyncio.Lock()
         self.metrics = MorphRuntimeMetrics()
+        self.domain_runtime = build_haos_runtime(store_loaded=True, ledger_data=ledger.data)
 
     async def handle(self, action: str, body: dict[str, Any]) -> dict[str, Any]:
         started = perf_counter()
@@ -110,7 +125,7 @@ class MorphTransferManager:
         started = perf_counter()
         """Mutate/read habitat state under the same durable authority lock."""
         from .migration import legacy_engine_enabled
-        if action not in {"list", "status", "history"} and legacy_engine_enabled(self.hass):
+        if action not in {"list", "status", "history", "starter-status", "chronicle-page"} and legacy_engine_enabled(self.hass):
             raise TransferError("ENGINE_CONFLICT", "legacy Morph engine is active")
         from .morph_habitat import (
             advance_morph,
@@ -137,9 +152,10 @@ class MorphTransferManager:
             # The periodic scheduler is the only owner of elapsed-life advancement.
             # Reading the dashboard/API must never advance life or sample HAOS.
             if not action_is_read("habitat", action):
-                environment = read_environment(self.hass, now)
-                for morph in candidate.data["morphs"].values():
-                    changed = advance_morph(morph, now, environment) or changed
+                if action not in {"game-start", "game-move", "reduce-event"}:
+                    environment = read_environment(self.hass, now)
+                    for morph in candidate.data["morphs"].values():
+                        changed = advance_morph(morph, now, environment) or changed
             if action == "list":
                 _exact(body, set(), "list request")
                 result = habitat_list(candidate, now)
@@ -161,6 +177,26 @@ class MorphTransferManager:
             elif action == "care":
                 result = care_for_morph(candidate, body, now)
                 changed = True
+            elif action == "game-start":
+                from .morph_habitat import start_garden_game
+                result = start_garden_game(candidate, body, now)
+                changed = True
+            elif action == "game-move":
+                from .morph_habitat import play_garden_game
+                result = play_garden_game(candidate, body, now)
+                changed = True
+            elif action == "reduce-event":
+                from ._vendor.morph_engine.event_reducer import reduce_local_event
+                from ._vendor.morph_engine.haos_runtime import build_haos_runtime
+                _exact(body, {"event", "sern_packet"}, "reducer request")
+                domain_runtime = getattr(self, "domain_runtime", None)
+                if domain_runtime is None:
+                    domain_runtime = build_haos_runtime(store_loaded=True, ledger_data=self.ledger.data)
+                result = reduce_local_event(candidate, body["event"], body["sern_packet"], now,
+                                            domain_runtime=domain_runtime)
+                # The one existing private Store must durably retain committed
+                # and rejected tickets before either is acknowledged.
+                changed = candidate.data != self.ledger.data
             elif action == "call":
                 result = call_morph(candidate, body, now)
                 changed = True
@@ -176,6 +212,10 @@ class MorphTransferManager:
             elif action == "history":
                 _exact(body, {"morph_id"}, "history request")
                 result = habitat_history(candidate, str(body["morph_id"]), now)
+            elif action == "chronicle-page":
+                from .morph_habitat import chronicle_page
+                _exact(body, {"morph_id", "after_sequence", "limit"}, "chronicle page request")
+                result = chronicle_page(candidate, str(body["morph_id"]), body["after_sequence"], body["limit"], now)
             else:
                 raise TransferError("NOT_FOUND", "unknown habitat action")
             if changed:
@@ -190,7 +230,7 @@ class MorphTransferManager:
         from .migration import legacy_engine_enabled
         if legacy_engine_enabled(self.hass):
             return
-        from .morph_habitat import advance_morph, read_environment, run_automatic_reflexes
+        from .morph_habitat import advance_morph, read_environment, run_automatic_reflexes, run_social_reflexes
 
         started = perf_counter()
         async with self.lock:
@@ -208,16 +248,15 @@ class MorphTransferManager:
                 changed = morph_advanced or changed
             reflex_changed, notices = run_automatic_reflexes(candidate, now)
             changed = reflex_changed or changed
+            social_changed = run_social_reflexes(candidate, now)
+            changed = social_changed or changed
             if changed:
                 await self.store.async_save(candidate.data)
                 self.ledger = candidate
             self.metrics.record_storage_decision(performed=changed)
             self.metrics.record_tick(started, evaluated=evaluated, advanced=advanced)
             for notice in notices:
-                if notice["kind"] == "GRADUATED":
-                    title, message = "Morph graduated", f"{notice['morph_id']} moved from Nursery to Horizon."
-                else:
-                    title, message = "Morph needs Code Haven review", f"{notice['morph_id']} is isolated in Code Haven for Operator review."
+                title, message = reflex_notice_content(notice)
                 await self.hass.services.async_call(
                     "persistent_notification", "create",
                     {"notification_id": notice["id"], "title": title, "message": message},
@@ -253,6 +292,3 @@ async def async_setup_morph_transfer(hass: HomeAssistant) -> None:
     hass.data[DATA_KEY] = manager
     hass.http.register_view(MorphTransferView)
     hass.http.register_view(MorphTransferStatusView)
-
-
-

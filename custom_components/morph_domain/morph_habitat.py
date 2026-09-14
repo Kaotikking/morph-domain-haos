@@ -55,7 +55,14 @@ class MorphHabitatView(HomeAssistantView):
             return self.json({"ok": False, "error": {"code": "ADMIN_REQUIRED", "message": "administrator authority is required"}}, status_code=403)
         manager: MorphTransferManager = request.app["hass"].data[DATA_KEY]
         try:
-            result = await manager.handle_habitat(action, await request.json())
+            body = await request.json()
+            if action in {"game-start", "game-move"}:
+                # The operator identity comes from HAOS authentication, never
+                # from a client-supplied game packet.
+                if "operator_id" in body:
+                    raise ValueError("operator identity is server-bound")
+                body["operator_id"] = request["hass_user"].id
+            result = await manager.handle_habitat(action, body)
             return self.json({"ok": True, "result": result})
         except TransferError as err:
             return self.json({"ok": False, "error": {"code": err.code, "message": str(err)}}, status_code=409)

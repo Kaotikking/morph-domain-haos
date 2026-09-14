@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 TRANSFER_READ_ACTIONS = frozenset({"status", "evidence"})
-HABITAT_READ_ACTIONS = frozenset({"list", "status", "history", "starter-status"})
+HABITAT_READ_ACTIONS = frozenset({"list", "status", "history", "starter-status", "chronicle-page"})
 _READ_ACTIONS = {
     "transfer": TRANSFER_READ_ACTIONS,
     "habitat": HABITAT_READ_ACTIONS,
@@ -14,6 +14,8 @@ _READ_ACTIONS = {
 
 def action_requires_admin(surface: str, action: str) -> bool:
     """Return False only for exact admitted read actions."""
+    if surface == "habitat" and action == "chronicle-page":
+        return True
     return action not in _READ_ACTIONS.get(surface, frozenset())
 
 
@@ -32,4 +34,3 @@ def action_is_read(surface: str, action: str) -> bool:
 def durable_write_required(surface: str, action: str, maintenance_changed: bool) -> bool:
     """Only mutation actions persist; a read never becomes maintenance."""
     return not action_is_read(surface, action)
-
