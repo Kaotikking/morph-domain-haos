@@ -105,6 +105,55 @@ def hosted_v3(now):
     return ledger
 
 
+def aligned_in_code_haven(now):
+    ledger = hosted_v3(now)
+    morph = ledger.data["morphs"]["pulse"]
+    alignment_id = "auto-nine-core:test-pulse"
+    core = morph["snapshot"]["payload"]["morph_core"]
+    morph["snapshot"]["payload"]["morph_core"] = transfer.align_in_code_haven(
+        core, morph["genome_sha256"], alignment_id, now.isoformat(),
+        "haos-code-haven", "a" * 64,
+    )
+    transfer.refresh_snapshot(morph)
+    ledger.data["operations"][alignment_id] = {
+        "operation_kind": "AUTO_NINE_CORE_ALIGNMENT",
+        "state": "ALIGNED_CODE_HAVEN", "morph_id": "pulse",
+        "generation": morph["generation"], "transfer_id": "t1",
+        "snapshot_digest": morph["snapshot_digest"],
+    }
+    return ledger, alignment_id
+
+
+def test_untouched_auto_alignment_discharge_is_single_and_preserves_identity():
+    now = datetime(2026, 9, 14, tzinfo=UTC)
+    ledger, alignment_id = aligned_in_code_haven(now)
+    morph = ledger.data["morphs"]["pulse"]
+    original_identity = morph["snapshot"]["payload"]["morph_core"]["root"]["identity"].copy()
+    changed, notices = habitat.run_automatic_reflexes(ledger, now)
+    assert changed and not notices
+    assert morph["authority"] == "HAOS"
+    assert morph["generation"] == 1
+    assert morph["snapshot"]["payload"]["morph_core"]["root"]["identity"] == original_identity
+    assert morph["habitat"]["place"] == "HORIZON"
+    assert ledger.data["operations"][alignment_id]["discharge_event_id"] == f"auto-discharge:{alignment_id}"
+    digest = morph["snapshot_digest"]
+    changed, notices = habitat.run_automatic_reflexes(ledger, now)
+    assert not changed and not notices
+    assert morph["snapshot_digest"] == digest
+
+
+def test_changed_code_haven_snapshot_requires_operator_review():
+    now = datetime(2026, 9, 14, tzinfo=UTC)
+    ledger, alignment_id = aligned_in_code_haven(now)
+    morph = ledger.data["morphs"]["pulse"]
+    morph["snapshot"]["payload"]["morph_core"]["knowledge"]["learned"]["operator_review"] = True
+    transfer.refresh_snapshot(morph)
+    changed, notices = habitat.run_automatic_reflexes(ledger, now)
+    assert changed and notices[0]["kind"] == "INTERVENTION"
+    assert morph["habitat"]["place"] == "CODE_HAVEN"
+    assert "discharged_at" not in ledger.data["operations"][alignment_id]
+
+
 def test_android_call_requires_committed_haos_horizon_morph():
     now = datetime(2026, 9, 6, tzinfo=UTC)
     ledger = hosted(now)
@@ -152,23 +201,22 @@ def test_nursery_graduates_once_after_72_hours_and_preserves_identity():
     assert notices_again == []
 
 
-def test_automatic_care_is_need_based_silent_and_once_per_eight_hour_window():
+def test_horizon_water_comes_from_spring_pool_not_timed_care_script():
     now = datetime(2026, 9, 8, 8, tzinfo=UTC)
-    ledger = hosted(now)
+    ledger = hosted_v3(now)
     morph = ledger.data["morphs"]["pulse"]
     morph["snapshot"]["payload"]["water_q8"] = 40
+    morph["snapshot"]["payload"]["morph_core"]["state"]["needs_q8"]["water"] = 40
     transfer.refresh_snapshot(morph)
 
     changed, notices = habitat.run_automatic_reflexes(ledger, now)
-    first_water = morph["snapshot"]["payload"]["water_q8"]
-    assert changed is True
-    assert notices == []
-    assert first_water == 88
-
-    changed_again, notices_again = habitat.run_automatic_reflexes(ledger, now + timedelta(hours=1))
-    assert changed_again is False
-    assert notices_again == []
-    assert morph["snapshot"]["payload"]["water_q8"] == first_water
+    assert not changed and not notices
+    assert morph["snapshot"]["payload"]["water_q8"] == 40
+    assert habitat.run_social_reflexes(ledger, now)
+    assert morph["snapshot"]["payload"]["water_q8"] == 88
+    activity = morph["habitat"]["social"]["last_activity"]
+    assert activity["kind"] == "DRINK" and activity["object_id"] == "spring-pool"
+    assert not habitat.run_social_reflexes(ledger, now)
 
 
 def test_code_haven_intervention_notice_is_deduplicated():
@@ -489,3 +537,18 @@ def test_expired_v3_return_restores_haos_core_authority_with_valid_digest():
     assert morph["snapshot"]["payload"]["morph_core"]["state"]["authority"] == "HAOS_ACTIVE"
     transfer.validate_snapshot(morph["snapshot"])
 
+
+def test_hatch_notification_never_masquerades_as_code_haven_intervention():
+    hatch = transfer.reflex_notice_content({"kind": "HATCHED", "morph_id": "water-egg"})
+    graduation = transfer.reflex_notice_content({"kind": "GRADUATED", "morph_id": "water-egg"})
+    intervention = transfer.reflex_notice_content({"kind": "INTERVENTION", "morph_id": "water-egg"})
+    assert hatch[0] == "Morph hatched"
+    assert "Code Haven" not in hatch[0] + hatch[1]
+    assert graduation[0] == "Morph graduated"
+    assert intervention[0] == "Morph needs Code Haven review"
+    try:
+        transfer.reflex_notice_content({"kind": "UNKNOWN", "morph_id": "water-egg"})
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("unknown reflex kind generated a notification")

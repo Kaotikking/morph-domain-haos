@@ -25,8 +25,8 @@ from ..morph_sdk.gen1_origin import ORIGIN_SCHEMA, hatch_starter
 from ..morph_sdk.dna_v1 import SOCIAL_SCHEMA, SOCIAL_STATES
 from ..morph_sdk.ump_world import decide_pair, choose_horizon_activity
 from .garden_games import GardenGameError, start_game, move as game_move, public_state
-from .world_objects import (OBJECTS, WorldObjectError, affinity_from_nine_core,
-                            choose_object, elemental_rest_scene,
+from .world_objects import (HORIZON_ACTIVITY_OBJECTS, OBJECTS, WorldObjectError, affinity_from_nine_core,
+                            elemental_rest_scene,
                             interact as object_interact, new_history)
 from ..morph_sdk.presentation import (
     PresentationError, bind_presentation, change_presentation, neutral_presentation,
@@ -45,8 +45,7 @@ PORTABLE_CHRONICLE_EVENT_LIMIT = 128
 PORTABLE_SNAPSHOT_RESERVE_BYTES = 32768
 TICK_INTERVAL = timedelta(seconds=30)
 NURSERY_GRADUATION = timedelta(hours=72)
-AUTOMATIC_CARE_INTERVAL = timedelta(hours=8)
-AUTOMATIC_CARE_THRESHOLD = 96
+GAME_REWARD_INTERVAL = timedelta(hours=8)
 SOCIAL_WINDOW_SECONDS = 2 * 60 * 60
 SOCIAL_NEED_FLOOR = 64
 REFLEX_SCHEMA = "serein.morph-reflex.v1"
@@ -353,6 +352,31 @@ def run_automatic_reflexes(
         habitat = _habitat(morph, now)
         reflex = habitat["reflex"]
 
+        # Only the untouched result of the inbound Code Haven alignment may
+        # leave automatically. A later repair or an Operator placement changes
+        # the digest, so genuine diagnostic holds remain in Code Haven.
+        if habitat["place"] == "CODE_HAVEN":
+            for operation_id, operation in ledger.data["operations"].items():
+                if (operation.get("operation_kind") != "AUTO_NINE_CORE_ALIGNMENT"
+                        or operation.get("state") != "ALIGNED_CODE_HAVEN"
+                        or operation.get("morph_id") != morph_id
+                        or operation.get("generation") != morph["generation"]
+                        or operation.get("snapshot_digest") != morph["snapshot_digest"]
+                        or operation.get("discharged_at") is not None):
+                    continue
+                inbound = ledger.data["operations"].get(operation.get("transfer_id"), {})
+                if inbound.get("state") != "ACTIVE_HAOS":
+                    continue
+                event_id = f"auto-discharge:{operation_id}"
+                place_morph(ledger, {
+                    "schema": HABITAT_SCHEMA, "event_id": event_id,
+                    "morph_id": morph_id, "place": "HORIZON",
+                }, now)
+                operation["discharged_at"] = _iso(now)
+                operation["discharge_event_id"] = event_id
+                changed = True
+                break
+
         # A sealed egg stays in Nursery until the canonical hatch transaction.
         # The 72-hour clock triggers that transaction before Horizon graduation.
         core = morph.get("snapshot", {}).get("payload", {}).get("morph_core", {})
@@ -389,26 +413,6 @@ def run_automatic_reflexes(
                 _sync_morph_core_state(morph, sync_place=True)
                 refresh_snapshot(morph)
                 notices.append({"id": event_id, "kind": "GRADUATED", "morph_id": morph_id})
-                changed = True
-
-        if habitat["place"] in ACTIVE_PLACES:
-            window = int(now.timestamp()) // int(AUTOMATIC_CARE_INTERVAL.total_seconds())
-            payload = morph["snapshot"]["payload"]
-            needs = {
-                "FEED": int(payload["food_q8"]),
-                "WATER": int(payload["water_q8"]),
-                "PLAY": int(payload["play_q8"]),
-                "REST": int(payload["rest_q8"]),
-            }
-            action = min(needs, key=lambda item: (needs[item], item))
-            if needs[action] <= AUTOMATIC_CARE_THRESHOLD and reflex["last_care_window"] != window:
-                care_for_morph(ledger, {
-                    "schema": HABITAT_SCHEMA,
-                    "event_id": f"auto-care:{morph_id}:{window}",
-                    "morph_id": morph_id,
-                    "action": action,
-                }, now)
-                reflex["last_care_window"] = window
                 changed = True
 
         if habitat["place"] == "CODE_HAVEN":
@@ -473,7 +477,8 @@ def run_social_reflexes(ledger: MorphTransferLedger, now: datetime) -> bool:
     """Make bounded, reciprocal world encounters once per pair/window.
 
     Pairing creates a real joint engine event; co-location by itself writes nothing.
-    No DNA, custody, portable snapshot, or breeding transaction is changed here.
+    Care and object history may update the portable snapshot, but DNA, custody,
+    and breeding authority do not change here.
     """
     window = int(now.timestamp()) // SOCIAL_WINDOW_SECONDS
     candidates: dict[str, dict[str, Any]] = {}
@@ -544,6 +549,20 @@ def run_social_reflexes(ledger: MorphTransferLedger, now: datetime) -> bool:
             _record(habitat, {"event_id": event_id, "at": _iso(now),
                               "type": "SOCIAL_INTERACTION", "partner": partner,
                               "place": first["place"], "ump": decision["decision"]})
+        cores = [ledger.data["morphs"][identity]["snapshot"]["payload"].get("morph_core", {})
+                 for identity in (first_id, partner_id)]
+        if all(core.get("schema") == MORPH_NINE_CORE_SCHEMA for core in cores):
+            a_affinity = affinity_from_nine_core(cores[0], first["place"])
+            b_affinity = affinity_from_nine_core(cores[1], first["place"])
+            objects = OBJECTS[first["place"]]
+            object_id = max(objects, key=lambda item: (
+                min(a_affinity[item], b_affinity[item]),
+                a_affinity[item] + b_affinity[item], -objects.index(item)))
+            object_event_id = "world-object:" + sha256(event_id.encode()).hexdigest()[:24]
+            interact_world_object(ledger, event_id=object_event_id,
+                                  place=first["place"], object_id=object_id,
+                                  participants=(first_id, partner_id),
+                                  willing={first_id: True, partner_id: True}, now=now)
         paired.update((first_id, partner_id))
         changed = True
     # Alone in Horizon, a Morph can still have a bounded, visible activity.
@@ -554,11 +573,18 @@ def run_social_reflexes(ledger: MorphTransferLedger, now: datetime) -> bool:
         event_id = f"world-solo:{morph_id}:{window}"
         if event_id in habitat["social"]["event_ids"]:
             continue
-        decision = choose_horizon_activity(candidates[morph_id])
+        decision = choose_horizon_activity(candidates[morph_id], window=window)
         if decision["decision"] != "ENCOUNTER":
             continue
         action = {"EAT": "FEED", "DRINK": "WATER", "REST": "REST",
                   "PLAY": "PLAY", "EXPLORE": "EXPLORE"}[decision["activity"]]
+        choices = HORIZON_ACTIVITY_OBJECTS[decision["activity"]]
+        core = ledger.data["morphs"][morph_id]["snapshot"]["payload"].get("morph_core", {})
+        if core.get("schema") == MORPH_NINE_CORE_SCHEMA:
+            affinities = affinity_from_nine_core(core, "HORIZON")
+            object_id = max(choices, key=lambda item: (affinities[item], -choices.index(item)))
+        else:
+            object_id = choices[0]
         expression = None
         if decision["activity"] == "REST":
             try:
@@ -574,9 +600,16 @@ def run_social_reflexes(ledger: MorphTransferLedger, now: datetime) -> bool:
         del habitat["social"]["event_ids"][:-HISTORY_CAPACITY]
         habitat["social"]["last_activity"] = {"at": _iso(now), "kind": decision["activity"],
                                                  "partner": None, "place": "HORIZON",
-                                                 "expression": expression}
+                                                 "object_id": object_id, "expression": expression}
         _record(habitat, {"event_id": event_id, "at": _iso(now), "type": "SOLO_ACTIVITY",
-                          "activity": decision["activity"], "expression": expression})
+                          "activity": decision["activity"], "object_id": object_id,
+                          "expression": expression})
+        core = ledger.data["morphs"][morph_id]["snapshot"]["payload"].get("morph_core", {})
+        if core.get("schema") == MORPH_NINE_CORE_SCHEMA:
+            object_event_id = "world-object:" + sha256(event_id.encode()).hexdigest()[:24]
+            interact_world_object(ledger, event_id=object_event_id,
+                                  place="HORIZON", object_id=object_id,
+                                  participants=(morph_id,), willing={morph_id: True}, now=now)
         changed = True
     return changed
 
@@ -699,7 +732,7 @@ def play_garden_game(ledger: MorphTransferLedger, request: dict[str, Any], now: 
     if repeated:
         return result
     if session["finished"]:
-        window = int(now.timestamp()) // int(AUTOMATIC_CARE_INTERVAL.total_seconds())
+        window = int(now.timestamp()) // int(GAME_REWARD_INTERVAL.total_seconds())
         if habitat["games"]["last_reward_window"] != window:
             payload = morph["snapshot"]["payload"]
             payload["play_q8"] = min(255, int(payload["play_q8"]) + 12)

@@ -35,6 +35,17 @@ def test_horizon_needs_are_deterministic_and_bounded():
     assert choose_horizon_activity(a)["decision"] == "UNKNOWN"
 
 
+def test_horizon_healthy_activity_varies_without_restart_reroll():
+    a = morph("six-morph-soak")
+    choices = [choose_horizon_activity(a, window=window)["activity"] for window in range(32)]
+    assert len(set(choices)) >= 3
+    assert set(choices).issubset({"EAT", "DRINK", "REST", "PLAY", "EXPLORE"})
+    assert choices == [choose_horizon_activity(a, window=window)["activity"] for window in range(32)]
+    a["needs"]["water"] = 40
+    assert all(choose_horizon_activity(a, window=window)["activity"] == "DRINK"
+               for window in range(32))
+
+
 def test_colocation_does_not_make_friends():
     a, b = morph("a"), morph("b")
     assert pair(a, b, reciprocal_event=False)["decision"] == "UNKNOWN"

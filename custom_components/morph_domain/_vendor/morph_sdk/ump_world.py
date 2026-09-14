@@ -6,6 +6,7 @@ advances DNA, or creates an egg. The habitat and Nursery transaction own effects
 
 from __future__ import annotations
 
+from hashlib import sha256
 from typing import Any
 
 from .dna_v1 import SOCIAL_STATES, validate_social_edge
@@ -27,8 +28,8 @@ def _known(morph: dict[str, Any]) -> bool:
     )
 
 
-def choose_horizon_activity(morph: dict[str, Any]) -> dict[str, Any]:
-    """Pick one of five needs-based activities without claiming an outcome."""
+def choose_horizon_activity(morph: dict[str, Any], *, window: int | None = None) -> dict[str, Any]:
+    """Pick an urgent need or a stable, bounded ordinary-world activity."""
     if not _known(morph) or morph["place"] != "HORIZON":
         return {"decision": "UNKNOWN", "activity": None, "reason": "NOT_ADMITTED"}
     needs = morph.get("needs")
@@ -41,8 +42,18 @@ def choose_horizon_activity(morph: dict[str, Any]) -> dict[str, Any]:
     order = (("food", "EAT"), ("water", "DRINK"), ("rest", "REST"), ("play", "PLAY"))
     lowest, activity = min(order, key=lambda item: (needs[item[0]], order.index(item)))
     if needs[lowest] >= 160:
-        activity = "EXPLORE"
-    return {"decision": "ENCOUNTER", "activity": activity, "reason": "BOUNDED_NEED"}
+        if window is None:
+            activity = "EXPLORE"
+        else:
+            # A window-scoped choice varies life without rerolling after restart.
+            choices = ("EAT", "DRINK", "REST", "REST", "PLAY", "PLAY", "PLAY",
+                       "EXPLORE", "EXPLORE", "EXPLORE", "EXPLORE")
+            roll = int.from_bytes(sha256(f"{morph['morph_id']}|{window}|HORIZON".encode()).digest()[:4], "big")
+            activity = choices[roll % len(choices)]
+        reason = "BOUNDED_VARIATION"
+    else:
+        reason = "BOUNDED_NEED"
+    return {"decision": "ENCOUNTER", "activity": activity, "reason": reason}
 
 
 def _mutual_edges(

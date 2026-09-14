@@ -93,6 +93,48 @@ def test_horizon_rest_expression_follows_primary_element_without_dna_change():
         activity = ledger.data["morphs"][morph["morph_id"]]["habitat"]["social"]["last_activity"]
         assert activity["kind"] == "REST" and activity["expression"] == scene
         assert core["root"]["identity"]["primitive_element"] == element
+        updated = ledger.data["morphs"][morph["morph_id"]]["snapshot"]["payload"]["morph_core"]
+        history = updated["knowledge"]["learned"]["world_objects"]
+        assert sum(history["counts"].values()) == 1
+        assert updated["memory"]["chronicle"]["events"][-1]["kind"] == "world-object"
+
+
+def test_horizon_pair_automatically_shares_one_object_with_replay_guard():
+    ledger = aligned("pulse", "HORIZON")
+    ledger.data["morphs"].update(aligned("ember", "HORIZON").data["morphs"])
+    original = {name: deepcopy(morph["snapshot"]["payload"]["morph_core"]["root"])
+                for name, morph in ledger.data["morphs"].items()}
+    assert engine_habitat.run_social_reflexes(ledger, NOW)
+    for name, morph in ledger.data["morphs"].items():
+        core = morph["snapshot"]["payload"]["morph_core"]
+        history = core["knowledge"]["learned"]["world_objects"]
+        assert sum(history["counts"].values()) == 1
+        assert core["root"] == original[name]
+        assert core["memory"]["chronicle"]["events"][-1]["kind"] == "world-object"
+    before = {name: morph["snapshot_digest"] for name, morph in ledger.data["morphs"].items()}
+    assert not engine_habitat.run_social_reflexes(ledger, NOW)
+    assert {name: morph["snapshot_digest"] for name, morph in ledger.data["morphs"].items()} == before
+
+
+def test_six_morph_horizon_soak_keeps_legacy_member_active():
+    names = ("dustdevil", "starter-water", "sentinel", "breeze", "pulse")
+    ledger = aligned(names[0], "HORIZON")
+    for name in names[1:]:
+        ledger.data["morphs"].update(aligned(name, "HORIZON").data["morphs"])
+    legacy = hosted_v3(NOW).data["morphs"]["pulse"]
+    legacy["morph_id"] = "ember"
+    legacy["snapshot"]["payload"]["morph_core"]["identity"]["morph_id"] = "ember"
+    transfer.refresh_snapshot(legacy)
+    ledger.data["morphs"]["ember"] = legacy
+    before = {name: (morph["generation"], morph["authority"])
+              for name, morph in ledger.data["morphs"].items()}
+    assert engine_habitat.run_social_reflexes(ledger, NOW)
+    assert len(ledger.data["morphs"]) == 6
+    for name, morph in ledger.data["morphs"].items():
+        assert (morph["generation"], morph["authority"]) == before[name]
+        assert morph["snapshot"]["payload"]["morph_core"]["schema"] == (
+            "serein.morph-core.v1" if name == "ember" else MORPH_NINE_CORE_SCHEMA)
+    assert not engine_habitat.run_social_reflexes(ledger, NOW)
 
 
 def test_live_ledger_world_play_continues_after_portable_budget_and_survives_restart():

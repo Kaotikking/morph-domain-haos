@@ -11,15 +11,22 @@ from copy import deepcopy
 from typing import Any
 
 OBJECTS = {
-    "HORIZON": ("rest-nook", "gathering-stone", "discovery-prism", "walking-path"),
+    "HORIZON": ("nourishment-grove", "spring-pool", "rest-nook",
+                "gathering-stone", "discovery-prism", "walking-path"),
     "SEREIN_GARDENS": ("play-orb", "shared-chimes", "quiet-pool", "pattern-tiles"),
 }
 PREFERENCE_THRESHOLD = 3
 OBJECT_ELEMENTS = {
+    "nourishment-grove": "EARTH", "spring-pool": "WATER",
     "rest-nook": "EARTH", "gathering-stone": "EARTH",
     "discovery-prism": "AIR", "walking-path": "AIR",
     "play-orb": "FIRE", "shared-chimes": "AIR",
     "quiet-pool": "WATER", "pattern-tiles": "EARTH",
+}
+HORIZON_ACTIVITY_OBJECTS = {
+    "EAT": ("nourishment-grove",), "DRINK": ("spring-pool",),
+    "REST": ("rest-nook",), "PLAY": ("gathering-stone",),
+    "EXPLORE": ("discovery-prism", "walking-path"),
 }
 ELEMENTAL_REST = {
     "AIR": "AIR_CURRENTS",
