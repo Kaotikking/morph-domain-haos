@@ -96,6 +96,7 @@ class MorphTransferManager:
             self.metrics.record_expiry_reconciliation(changed=maintenance_changed)
             if action == "prepare": result = candidate.prepare_inbound(body, now)
             elif action == "migrate": result = candidate.migrate_to_morph_core(body, now)
+            elif action == "align-nine-core": result = candidate.align_existing_nine_core(body, now)
             elif action == "inward-bloom": result = candidate.record_inward_bloom(body, now)
             elif action == "repair-element": result = candidate.repair_primitive_element(body, now)
             elif action == "commit":

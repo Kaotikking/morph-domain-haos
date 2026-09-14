@@ -708,3 +708,67 @@ def test_current_snapshot_denies_corrupt_durable_digest():
     with pytest.raises(Exception) as error:
         ledger.current_snapshot("pulse")
     assert getattr(error.value, "code", None) == "SNAPSHOT_CONFLICT"
+
+
+def test_existing_founder_aligns_once_in_code_haven_without_life_rewrite():
+    now = datetime(2026, 9, 14, tzinfo=UTC)
+    ledger = hosted_v3(now)
+    morph = ledger.data["morphs"]["pulse"]
+    morph["founder_id"] = "EMBER"
+    old = morph["snapshot"]["payload"]["morph_core"]
+    old["identity"]["founder_lineage"] = "f-01"
+    old["identity"]["primitive_element"] = "FIRE"
+    old["state"]["place"] = "CODE_HAVEN"
+    old["state"]["active_frame"] = "haos-code-haven"
+    old["embodiment"]["body_id"] = "UNKNOWN"
+    old["embodiment"]["body_class"] = "UNKNOWN"
+    transfer.refresh_snapshot(morph)
+    before = json.loads(json.dumps(morph["snapshot"]["payload"]))
+    operation_count = len(ledger.data["operations"])
+    request = {
+        "schema": transfer.NINE_CORE_ALIGNMENT_SCHEMA,
+        "alignment_id": "ember-nine-core:test", "morph_id": "pulse",
+        "founder_id": "EMBER", "current_authority": "HAOS",
+        "generation": morph["generation"],
+        "predecessor_snapshot_digest": morph["snapshot_digest"],
+        "created_at": now.isoformat(), "actor": "haos-code-haven",
+        "evidence_digest": "a" * 64, "historic_role": "founder",
+    }
+    receipt = ledger.align_existing_nine_core(request, now)
+    after = morph["snapshot"]["payload"]
+    core = after["morph_core"]
+    assert receipt["operation_state"] == "ALIGNED_CODE_HAVEN"
+    assert core["schema"] == "serein.morph-nine-core.v1"
+    assert core["root"]["historic_role"] == "founder"
+    assert core["root"]["identity"] == before["morph_core"]["identity"]
+    assert core["memory"]["life"] == before["morph_core"]["life"]
+    assert core["platform"]["embodiment"] == before["morph_core"]["embodiment"]
+    assert all(after[key] == value for key, value in before.items() if key != "morph_core")
+    evidence = ledger.evidence_bundle(request["alignment_id"])
+    assert evidence["operation_kind"] == "EXISTING_NINE_CORE_ALIGNMENT"
+    assert evidence["request"] == request
+    assert evidence["predecessor_snapshot"]["payload"]["morph_core"] == before["morph_core"]
+    assert ledger.align_existing_nine_core(request, now) == receipt
+    assert len(ledger.data["operations"]) == operation_count + 1
+
+
+def test_existing_founder_alignment_denies_unproven_role():
+    now = datetime(2026, 9, 14, tzinfo=UTC)
+    ledger = hosted_v3(now)
+    morph = ledger.data["morphs"]["pulse"]
+    core = morph["snapshot"]["payload"]["morph_core"]
+    core["state"]["place"] = "CODE_HAVEN"
+    core["state"]["active_frame"] = "haos-code-haven"
+    transfer.refresh_snapshot(morph)
+    request = {
+        "schema": transfer.NINE_CORE_ALIGNMENT_SCHEMA,
+        "alignment_id": "bad-founder:test", "morph_id": "pulse",
+        "founder_id": morph["founder_id"], "current_authority": "HAOS",
+        "generation": morph["generation"],
+        "predecessor_snapshot_digest": morph["snapshot_digest"],
+        "created_at": now.isoformat(), "actor": "haos-code-haven",
+        "evidence_digest": "a" * 64, "historic_role": "founder",
+    }
+    with pytest.raises(transfer.TransferError) as error:
+        ledger.align_existing_nine_core(request, now)
+    assert error.value.code == "FOUNDER_ROLE_CONFLICT"

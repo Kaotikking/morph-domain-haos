@@ -40,6 +40,7 @@ LIFE_SCHEMA = "serein.android.morph-life-state.v1"
 PORTABLE_LIFE_SCHEMA = "serein.morph-life-state.v2"
 MORPH_CORE_LIFE_SCHEMA = "serein.morph-life-state.v3"
 MORPH_CORE_MIGRATION_SCHEMA = "serein.morph-core-migration.v1"
+NINE_CORE_ALIGNMENT_SCHEMA = "serein.morph-nine-core-alignment.v1"
 MORPH_CORE_REPAIR_SCHEMA = "serein.morph-core-repair.v1"
 INWARD_BLOOM_SCHEMA = "serein.inward-bloom.v1"
 FIRST_WHOLE_MORPH_ID = "morph-child:37ca6f7dfd4fbba83f43ab4e88f8bf90"
@@ -466,6 +467,81 @@ class MorphTransferLedger:
         op["completion_receipt"] = self.status(migration_id, include_snapshot=True)
         return deepcopy(op["completion_receipt"])
 
+    def align_existing_nine_core(self, request: dict[str, Any], now: datetime) -> dict[str, Any]:
+        """Upgrade one already-owned legacy Core inside Code Haven, once."""
+        fields = {"schema", "alignment_id", "morph_id", "founder_id", "current_authority",
+                  "generation", "predecessor_snapshot_digest", "created_at", "actor",
+                  "evidence_digest", "historic_role"}
+        _exact(request, fields, "nine Core alignment request")
+        if request["schema"] != NINE_CORE_ALIGNMENT_SCHEMA:
+            raise TransferError("INVALID_SCHEMA", "nine Core alignment schema is not admitted")
+        alignment_id = str(request["alignment_id"])
+        if not alignment_id or not isinstance(request["actor"], str) or not request["actor"]:
+            raise TransferError("INVALID_ATTRIBUTION", "alignment ID and actor are required")
+        if request["historic_role"] not in {"founder", "lineage-member"}:
+            raise TransferError("INVALID_ATTRIBUTION", "historic role is not admitted")
+        _parse_time(request["created_at"])
+        if _parse_time(request["created_at"]) > now.astimezone(UTC):
+            raise TransferError("INVALID_TIME", "alignment attribution is in the future")
+        if not isinstance(request["evidence_digest"], str) or not hmac.compare_digest(
+                request["evidence_digest"], request["evidence_digest"].lower()
+        ) or len(request["evidence_digest"]) != 64:
+            raise TransferError("INVALID_ATTRIBUTION", "alignment evidence digest is invalid")
+        try:
+            int(request["evidence_digest"], 16)
+        except ValueError as err:
+            raise TransferError("INVALID_ATTRIBUTION", "alignment evidence digest is invalid") from err
+        fingerprint = sha256_json(request)
+        existing = self.data["operations"].get(alignment_id)
+        if existing:
+            if existing.get("operation_kind") != "EXISTING_NINE_CORE_ALIGNMENT" or existing.get("request_fingerprint") != fingerprint:
+                raise TransferError("REPLAY_CONFLICT", "alignment ID payload changed")
+            return deepcopy(existing.get("completion_receipt") or self.status(alignment_id))
+        morph = self.data["morphs"].get(str(request["morph_id"]))
+        if morph is None:
+            raise TransferError("NOT_FOUND", "Morph is not admitted")
+        if morph["founder_id"] != request["founder_id"]:
+            raise TransferError("IDENTITY_CONFLICT", "founder identity differs")
+        if morph["authority"] != request["current_authority"] or morph["authority"] != "HAOS":
+            raise TransferError("AUTHORITY_CONFLICT", "alignment requires HAOS authority")
+        if type(request["generation"]) is not int or morph["generation"] != request["generation"]:
+            raise TransferError("GENERATION_CONFLICT", "alignment generation differs")
+        if not hmac.compare_digest(str(request["predecessor_snapshot_digest"]), morph["snapshot_digest"]):
+            raise TransferError("PREDECESSOR_DIGEST_MISMATCH", "alignment predecessor differs")
+        if morph["snapshot"]["schema"] != MORPH_CORE_LIFE_SCHEMA:
+            raise TransferError("INCOMPATIBLE_LIFE_SCHEMA", "alignment requires Morph Core v3")
+        old_core = morph["snapshot"]["payload"]["morph_core"]
+        if old_core.get("schema") != "serein.morph-core.v1":
+            raise TransferError("NINE_CORE_ALREADY_ALIGNED", "Morph already has nine Cores")
+        if old_core["state"]["place"] != "CODE_HAVEN" or old_core["state"]["active_frame"] != "haos-code-haven":
+            raise TransferError("CODE_HAVEN_REQUIRED", "nine Core alignment requires Code Haven")
+        identity = old_core["identity"]
+        if identity["morph_id"] != morph["morph_id"] or identity["device_birth_lineage"] != morph["device_birth_lineage"]:
+            raise TransferError("IDENTITY_CONFLICT", "Core identity differs from ledger")
+        if request["historic_role"] == "founder" and not (
+                identity["generation"] == 0 and identity["founder_lineage"].startswith("f-")
+                and morph["founder_id"] in {"EMBER", "PULSE", "SPARK", "SENTINEL"}):
+            raise TransferError("FOUNDER_ROLE_CONFLICT", "founder role lacks lineage proof")
+        predecessor_snapshot = deepcopy(morph["snapshot"])
+        try:
+            morph["snapshot"]["payload"]["morph_core"] = align_in_code_haven(
+                old_core, morph["genome_sha256"], alignment_id, request["created_at"],
+                request["actor"], request["evidence_digest"],
+                historic_role=request["historic_role"], emergence_event="code-haven-alignment",
+            )
+        except MorphCoreError as err:
+            raise TransferError(err.code, str(err)) from err
+        refresh_snapshot(morph)
+        op = deepcopy(request)
+        op.update({"operation_kind": "EXISTING_NINE_CORE_ALIGNMENT", "state": "ALIGNED_CODE_HAVEN",
+                   "authority": "HAOS", "snapshot_digest": morph["snapshot_digest"],
+                   "request_fingerprint": fingerprint, "predecessor_snapshot": predecessor_snapshot,
+                   "snapshot": deepcopy(morph["snapshot"]),
+                   "completed_at": now.astimezone(UTC).isoformat().replace("+00:00", "Z")})
+        self.data["operations"][alignment_id] = op
+        op["completion_receipt"] = self.status(alignment_id, include_snapshot=True)
+        return deepcopy(op["completion_receipt"])
+
     def record_inward_bloom(self, request: dict[str, Any], now: datetime) -> dict[str, Any]:
         """Record Dustdevil's unique Void-origin transition to nine portable Cores."""
         fields = {"schema", "bloom_id", "morph_id", "current_authority", "generation",
@@ -672,6 +748,8 @@ class MorphTransferLedger:
             result["return_id"] = op["return_id"]
         if "migration_id" in op:
             result["migration_id"] = op["migration_id"]
+        if "alignment_id" in op:
+            result["alignment_id"] = op["alignment_id"]
         if "bloom_id" in op:
             result["bloom_id"] = op["bloom_id"]
         morph = self.data["morphs"].get(op["morph_id"])
@@ -701,20 +779,26 @@ class MorphTransferLedger:
         """Return authenticated migration/repair lineage without changing state."""
         op = self._op(operation_id)
         kind = op.get("operation_kind")
-        if kind not in {"MORPH_CORE_MIGRATION", "MORPH_CORE_REPAIR"}:
+        if kind not in {"MORPH_CORE_MIGRATION", "MORPH_CORE_REPAIR", "EXISTING_NINE_CORE_ALIGNMENT"}:
             raise TransferError("EVIDENCE_NOT_AVAILABLE", "operation has no admitted evidence bundle")
         if "predecessor_snapshot" not in op or "completion_receipt" not in op:
             raise TransferError(
                 "HISTORICAL_EVIDENCE_UNAVAILABLE",
                 "operation predates immutable evidence capture and must not be reconstructed",
             )
-        request_fields = ({"schema", "migration_id", "morph_id", "founder_id",
-            "device_birth_lineage", "genome_sha256", "source_frame", "current_authority",
-            "generation", "predecessor_snapshot_digest", "created_at", "actor", "reason",
-            "evidence_digest", "snapshot"} if kind == "MORPH_CORE_MIGRATION" else
-            {"schema", "repair_id", "morph_id", "current_authority", "generation",
-             "predecessor_snapshot_digest", "expected_current_element", "corrected_element",
-             "created_at", "actor", "reason", "evidence_digest"})
+        if kind == "MORPH_CORE_MIGRATION":
+            request_fields = {"schema", "migration_id", "morph_id", "founder_id",
+                "device_birth_lineage", "genome_sha256", "source_frame", "current_authority",
+                "generation", "predecessor_snapshot_digest", "created_at", "actor", "reason",
+                "evidence_digest", "snapshot"}
+        elif kind == "EXISTING_NINE_CORE_ALIGNMENT":
+            request_fields = {"schema", "alignment_id", "morph_id", "founder_id",
+                "current_authority", "generation", "predecessor_snapshot_digest",
+                "created_at", "actor", "evidence_digest", "historic_role"}
+        else:
+            request_fields = {"schema", "repair_id", "morph_id", "current_authority",
+                "generation", "predecessor_snapshot_digest", "expected_current_element",
+                "corrected_element", "created_at", "actor", "reason", "evidence_digest"}
         request = {key: deepcopy(op[key]) for key in request_fields}
         result = deepcopy(op["completion_receipt"])
         bundle = {"schema": MORPH_EVIDENCE_SCHEMA, "operation_id": operation_id,

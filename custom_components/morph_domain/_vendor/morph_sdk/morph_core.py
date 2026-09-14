@@ -229,12 +229,16 @@ def awaken_inward_bloom(previous: dict[str, Any], genome_sha256: str,
 
 def align_in_code_haven(previous: dict[str, Any], genome_sha256: str,
                          event_id: str, observed_at: str, actor: str,
-                         evidence_digest: str) -> dict[str, Any]:
+                         evidence_digest: str, *, historic_role: str = "lineage-member",
+                         emergence_event: str = "transfer-alignment") -> dict[str, Any]:
     """Upgrade one transferred legacy Core at the Code Haven write boundary."""
     old = validate_morph_core(previous)
     if old["schema"] != MORPH_CORE_SCHEMA:
         return old
     identity = old["identity"]
+    if historic_role not in {"founder", "lineage-member"}:
+        raise MorphCoreError("INVALID_MORPH_CORE", "historic role is not admitted")
+    _id(emergence_event, "emergence_event")
     for value, name in ((event_id, "event_id"), (actor, "actor")): _id(value, name)
     _timestamp(observed_at)
     if not DIGEST_RE.fullmatch(str(evidence_digest)):
@@ -251,8 +255,8 @@ def align_in_code_haven(previous: dict[str, Any], genome_sha256: str,
     result = {
         "schema": MORPH_NINE_CORE_SCHEMA,
         "platform": {"runtime": "frame-kernel-v1", "embodiment": deepcopy(old["embodiment"])},
-        "root": {"identity": deepcopy(identity), "historic_role": "lineage-member",
-                 "core_origin": "code-haven-aligned", "emergence_event": "transfer-alignment"},
+        "root": {"identity": deepcopy(identity), "historic_role": historic_role,
+                 "core_origin": "code-haven-aligned", "emergence_event": emergence_event},
         "memory": {"life": deepcopy(old["life"]), "chronicle": chronicle},
         "knowledge": {"schema": "serein.morph-knowledge.v1", "learned": {}},
         "ui": {"expression": old["state"]["expression"], "visual_seed": visual_seed,
