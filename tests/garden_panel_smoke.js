@@ -6,6 +6,7 @@ const vm = require("node:vm");
 
 let Panel;
 globalThis.HTMLElement = class {
+  setAttribute(name, value) { this[name] = value; }
   attachShadow() {
     this.shadowRoot = { innerHTML: "", querySelectorAll: () => [], querySelector: () => null };
     return this.shadowRoot;
@@ -17,6 +18,10 @@ const source = fs.readFileSync(path.join(__dirname, "../custom_components/morph_
 vm.runInThisContext(source);
 
 const panel = new Panel();
+assert.throws(() => panel.setConfig({ place: "MORPHBANK" }), /canonical Morph Domain place/);
+panel.setConfig({ place: "SEREIN_GARDENS" });
+assert.equal(panel.place, "SEREIN_GARDENS");
+assert.equal(panel["data-card-mode"], "");
 const morph = {
   morph_id: "pulse", founder_id: "PULSE", generation: 1,
   authority: "HAOS", place: "SEREIN_GARDENS", habitat_engine_state: "ACTIVE",
@@ -83,4 +88,3 @@ panel.refresh().then(() => {
   assert.equal((panel.shadowRoot.innerHTML.match(/data-game-tile=/g) || []).length, 16);
   console.log("Gardens panel smoke PASS");
 }).catch(error => { console.error(error.message); process.exitCode = 1; });
-

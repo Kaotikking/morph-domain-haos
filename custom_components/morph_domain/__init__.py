@@ -1,5 +1,8 @@
 """MorphDomain: a removable HAOS habitat for Serein Morphs."""
 
+from pathlib import Path
+
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
@@ -9,6 +12,8 @@ from .morph_transfer import DATA_KEY, async_setup_morph_transfer
 from .migration import legacy_engine_enabled
 
 PLATFORMS = (Platform.SENSOR,)
+CARD_PATH = "/morph-domain-assets/morph-domain-panel.js"
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Load MorphDomain without claiming authority over any Morph."""
     if legacy_engine_enabled(hass):
@@ -16,6 +21,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         return False
     await async_setup_morph_transfer(hass)
     await async_setup_morph_habitat(hass)
+    if not hass.data.get("morph_domain_card_registered"):
+        await hass.http.async_register_static_paths([
+            StaticPathConfig(CARD_PATH, str(Path(__file__).parent / "frontend" / "morph-domain-panel.js"), False)
+        ])
+        hass.data["morph_domain_card_registered"] = True
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
