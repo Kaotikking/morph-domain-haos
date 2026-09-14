@@ -213,7 +213,8 @@ def test_horizon_water_comes_from_spring_pool_not_timed_care_script():
     assert not changed and not notices
     assert morph["snapshot"]["payload"]["water_q8"] == 40
     assert habitat.run_social_reflexes(ledger, now)
-    assert morph["snapshot"]["payload"]["water_q8"] == 88
+    assert morph["snapshot"]["payload"]["water_q8"] == 102
+    assert habitat.habitat_status(ledger, "pulse", now)["care_levels"]["water"] == 2
     activity = morph["habitat"]["social"]["last_activity"]
     assert activity["kind"] == "DRINK" and activity["object_id"] == "spring-pool"
     assert not habitat.run_social_reflexes(ledger, now)
@@ -325,18 +326,45 @@ def test_void_stasis_and_24_hour_withdrawal_lock():
     assert status["place"] == "HORIZON"
 
 
-def test_care_matches_android_values_and_is_idempotent():
+def test_operator_care_advances_two_levels_and_is_idempotent():
     now = datetime(2026, 9, 6, tzinfo=UTC)
     ledger = hosted(now)
     request = {"schema": habitat.HABITAT_SCHEMA, "event_id": "care-1", "morph_id": "pulse", "action": "PLAY"}
     first = habitat.care_for_morph(ledger, request, now)
     second = habitat.care_for_morph(ledger, request, now + timedelta(seconds=1))
     assert first["life"] == second["life"]
-    assert first["life"]["play_q8"] == 240
+    assert first["life"]["play_q8"] == 255
+    assert first["care_levels"]["play"] == 5
     assert first["life"]["attention_q8"] == 218
     assert first["life"]["arousal_q8"] == 148
     assert first["life"]["behavior"] == "PLAY"
     assert first["life"]["memories"][-1] == {"code": "PLAY", "age_ms": 0, "weight": 220}
+
+
+def test_care_labels_distinguish_operator_and_horizon_and_cap_at_five():
+    now = datetime(2026, 9, 6, tzinfo=UTC)
+    ledger = hosted(now)
+    morph = ledger.data["morphs"]["pulse"]
+    morph["snapshot"]["payload"]["food_q8"] = 0
+    transfer.refresh_snapshot(morph)
+    assert habitat.habitat_status(ledger, "pulse", now)["care_levels"]["food"] == 1
+    request = {"schema": habitat.HABITAT_SCHEMA, "event_id": "operator-meal",
+               "morph_id": "pulse", "action": "FEED"}
+    status = habitat.care_for_morph(ledger, request, now)
+    assert status["care_levels"]["food"] == 3
+    assert habitat.care_for_morph(ledger, request, now)["care_levels"]["food"] == 3
+    assert morph["habitat"]["history"][-1]["origin"] == "OPERATOR"
+    morph["snapshot"]["payload"]["food_q8"] = 0
+    transfer.refresh_snapshot(morph)
+    environment = {**request, "event_id": "horizon-grove"}
+    status = habitat.care_for_morph(ledger, environment, now, origin="ENVIRONMENT")
+    assert status["care_levels"]["food"] == 2
+    assert habitat.care_for_morph(ledger, environment, now, origin="ENVIRONMENT")["care_levels"]["food"] == 2
+    assert morph["habitat"]["history"][-1]["origin"] == "ENVIRONMENT"
+    for index in range(3):
+        status = habitat.care_for_morph(ledger, {**environment,
+                 "event_id": f"horizon-grove-{index}"}, now, origin="ENVIRONMENT")
+    assert status["care_levels"]["food"] == 5
 
 
 def test_remote_morph_cannot_be_placed_or_cared_for():

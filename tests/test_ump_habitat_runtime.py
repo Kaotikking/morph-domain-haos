@@ -27,6 +27,19 @@ def test_horizon_encounters_build_mutual_familiarity_without_double_counting():
     assert first["edges"]["ember"]["state"] == "AWARE"
     assert first["edges"]["ember"]["evidence_count"] == 1
     assert not habitat.run_social_reflexes(ledger, now)
+
+
+def test_horizon_resource_visits_are_frequent_without_repeating_social_meetings():
+    now = datetime(2026, 9, 13, 12, tzinfo=UTC)
+    ledger = pair_ledger(now)
+    assert habitat.run_social_reflexes(ledger, now)
+    assert not habitat.run_social_reflexes(ledger, now)
+    later = now + timedelta(minutes=5)
+    assert habitat.run_social_reflexes(ledger, later)
+    first = habitat.habitat_status(ledger, "pulse", later)
+    assert first["social"]["edges"]["ember"]["evidence_count"] == 1
+    assert first["social"]["last_activity"]["kind"] != "SHARED_PLAY"
+    assert not habitat.run_social_reflexes(ledger, later)
     assert habitat.habitat_status(ledger, "pulse", now)["social"]["edges"]["ember"]["evidence_count"] == 1
     for hours in (2, 4):
         assert habitat.run_social_reflexes(ledger, now + timedelta(hours=hours))
@@ -106,24 +119,28 @@ def test_horizon_low_need_selects_real_care_not_just_a_log_entry():
     before = morph["snapshot_digest"]
     assert habitat.run_social_reflexes(ledger, now)
     status = habitat.habitat_status(ledger, "pulse", now)
-    assert status["life"]["food_q8"] == 68
+    assert status["life"]["food_q8"] == 102
+    assert status["care_levels"]["food"] == 2
     assert status["social"]["last_activity"]["kind"] == "EAT"
     assert status["snapshot_digest"] != before
     assert not habitat.run_social_reflexes(ledger, now)
-    assert habitat.habitat_status(ledger, "pulse", now)["life"]["food_q8"] == 68
+    assert habitat.habitat_status(ledger, "pulse", now)["life"]["food_q8"] == 102
 
 
-def test_horizon_exploration_has_small_real_effect_and_is_replay_safe():
-    now = datetime(2026, 9, 13, 12, tzinfo=UTC)
+def test_horizon_exploration_has_bounded_real_effect_and_is_replay_safe():
+    now = datetime(2026, 9, 13, 12, 30, tzinfo=UTC)
     ledger = hosted_v3(now)
     morph = ledger.data["morphs"]["pulse"]
     payload = morph["snapshot"]["payload"]
+    for field in ("food_q8", "water_q8", "rest_q8", "play_q8"):
+        payload[field] = 255
     before_attention = payload["attention_q8"]
     before_arousal = payload["arousal_q8"]
     assert habitat.run_social_reflexes(ledger, now)
     status = habitat.habitat_status(ledger, "pulse", now)
     assert status["social"]["last_activity"]["kind"] == "EXPLORE"
-    assert status["life"]["attention_q8"] == min(255, before_attention + 4)
+    assert habitat.care_level(status["life"]["attention_q8"]) == min(
+        5, habitat.care_level(before_attention) + 1)
     assert status["life"]["arousal_q8"] == min(255, before_arousal + 4)
     assert status["life"]["memories"][-1]["code"] == "NOVEL"
     assert not habitat.run_social_reflexes(transfer.MorphTransferLedger(deepcopy(ledger.data)), now)
@@ -138,7 +155,8 @@ def test_low_need_morph_does_not_socialize_instead_of_self_care():
     assert habitat.run_social_reflexes(ledger, now)
     pulse = habitat.habitat_status(ledger, "pulse", now)
     ember = habitat.habitat_status(ledger, "ember", now)
-    assert pulse["life"]["water_q8"] == 60
+    assert pulse["life"]["water_q8"] == 102
+    assert pulse["care_levels"]["water"] == 2
     assert pulse["social"]["last_activity"]["kind"] == "DRINK"
     assert pulse["social"]["edges"] == {}
     assert ember["social"]["edges"] == {}

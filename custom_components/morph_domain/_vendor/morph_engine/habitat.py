@@ -47,9 +47,23 @@ TICK_INTERVAL = timedelta(seconds=30)
 NURSERY_GRADUATION = timedelta(hours=72)
 GAME_REWARD_INTERVAL = timedelta(hours=8)
 SOCIAL_WINDOW_SECONDS = 2 * 60 * 60
+HORIZON_WINDOW_SECONDS = 5 * 60
 SOCIAL_NEED_FLOOR = 64
 REFLEX_SCHEMA = "serein.morph-reflex.v1"
 CARE_FIELDS = ("food_q8", "water_q8", "play_q8", "rest_q8", "attention_q8")
+CARE_LEVEL_CEILINGS = (51, 102, 153, 204, 255)
+
+
+def care_level(value: int) -> int:
+    """Project an existing q8 need onto the public, founder-safe 1..5 scale."""
+    return min(5, 1 + max(0, min(255, int(value))) * 5 // 256)
+
+
+def _raise_care(payload: dict[str, Any], field: str, steps: int) -> tuple[int, int]:
+    before = care_level(payload[field])
+    after = min(5, before + steps)
+    payload[field] = max(int(payload[field]), CARE_LEVEL_CEILINGS[after - 1])
+    return before, after
 # Deployment-specific frame bindings are configured by each installation.
 FRAME_ALIASES: dict[str, str] = {}
 ELEMENTS = ("FIRE", "WATER", "AIR", "EARTH")
@@ -481,6 +495,7 @@ def run_social_reflexes(ledger: MorphTransferLedger, now: datetime) -> bool:
     and breeding authority do not change here.
     """
     window = int(now.timestamp()) // SOCIAL_WINDOW_SECONDS
+    horizon_window = int(now.timestamp()) // HORIZON_WINDOW_SECONDS
     candidates: dict[str, dict[str, Any]] = {}
     for morph_id, morph in ledger.data["morphs"].items():
         subject = _social_subject(morph, now)
@@ -495,11 +510,22 @@ def run_social_reflexes(ledger: MorphTransferLedger, now: datetime) -> bool:
         if first_id in paired:
             continue
         first = candidates[first_id]
+        social_prefix = f"world-social:{first['place']}:{window}:"
+        first_habitat = _habitat(ledger.data["morphs"][first_id], now)
+        if any(event.startswith(social_prefix) for event in first_habitat["social"]["event_ids"]):
+            last = first_habitat["social"].get("last_activity") or {}
+            if (last.get("kind") == "SHARED_PLAY" and
+                    int(datetime.fromisoformat(last["at"].replace("Z", "+00:00")).timestamp())
+                    // HORIZON_WINDOW_SECONDS == horizon_window):
+                paired.add(first_id)
+            continue
         if min(first["needs"].values()) < SOCIAL_NEED_FLOOR:
             continue
         eligible = [item for item in ids if item not in paired and item != first_id
                     and candidates[item]["place"] == first["place"]
-                    and min(candidates[item]["needs"].values()) >= SOCIAL_NEED_FLOOR]
+                    and min(candidates[item]["needs"].values()) >= SOCIAL_NEED_FLOOR
+                    and not any(event.startswith(social_prefix) for event in
+                                _habitat(ledger.data["morphs"][item], now)["social"]["event_ids"])]
         # Every third window uses rotated order alone so family preference does
         # not permanently exclude unrelated Morphs from public-space meetings.
         partner_id = (max(eligible, key=lambda item: _kinship_score(
@@ -514,7 +540,6 @@ def run_social_reflexes(ledger: MorphTransferLedger, now: datetime) -> bool:
         second_habitat = _habitat(second_morph, now)
         event_id = f"world-social:{first['place']}:{window}:{':'.join(sorted((first_id, partner_id)))}"
         if event_id in first_habitat["social"]["event_ids"] or event_id in second_habitat["social"]["event_ids"]:
-            paired.update((first_id, partner_id))
             continue
         a_edge = _edge(first_habitat, first_id, partner_id)
         b_edge = _edge(second_habitat, partner_id, first_id)
@@ -529,7 +554,7 @@ def run_social_reflexes(ledger: MorphTransferLedger, now: datetime) -> bool:
             care_for_morph(ledger, {
                 "schema": HABITAT_SCHEMA, "event_id": f"{event_id}:play:{subject_id}",
                 "morph_id": subject_id, "action": "PLAY",
-            }, now)
+            }, now, origin="ENVIRONMENT")
         for subject_id, partner, habitat, edge in (
             (first_id, partner_id, first_habitat, a_edge),
             (partner_id, first_id, second_habitat, b_edge),
@@ -570,10 +595,10 @@ def run_social_reflexes(ledger: MorphTransferLedger, now: datetime) -> bool:
         if morph_id in paired or candidates[morph_id]["place"] != "HORIZON":
             continue
         habitat = _habitat(ledger.data["morphs"][morph_id], now)
-        event_id = f"world-solo:{morph_id}:{window}"
+        event_id = f"world-solo:{morph_id}:{horizon_window}"
         if event_id in habitat["social"]["event_ids"]:
             continue
-        decision = choose_horizon_activity(candidates[morph_id], window=window)
+        decision = choose_horizon_activity(candidates[morph_id], window=horizon_window)
         if decision["decision"] != "ENCOUNTER":
             continue
         action = {"EAT": "FEED", "DRINK": "WATER", "REST": "REST",
@@ -595,7 +620,7 @@ def run_social_reflexes(ledger: MorphTransferLedger, now: datetime) -> bool:
                 continue
         care_for_morph(ledger, {"schema": HABITAT_SCHEMA,
                                 "event_id": f"{event_id}:care", "morph_id": morph_id,
-                                "action": action}, now)
+                                "action": action}, now, origin="ENVIRONMENT")
         habitat["social"]["event_ids"].append(event_id)
         del habitat["social"]["event_ids"][:-HISTORY_CAPACITY]
         habitat["social"]["last_activity"] = {"at": _iso(now), "kind": decision["activity"],
@@ -782,6 +807,14 @@ def habitat_status(ledger: MorphTransferLedger, morph_id: str, now: datetime) ->
         "automatic_reflex": deepcopy(habitat["reflex"]),
         "life": deepcopy(morph["snapshot"]["payload"]),
     }
+    life = result["life"]
+    result["care_levels"] = {
+        "energy": care_level(255 - int(life["fatigue_q8"])),
+        "food": care_level(life["food_q8"]),
+        "water": care_level(life["water_q8"]),
+        "play": care_level(life["play_q8"]),
+        "rest": care_level(life["rest_q8"]),
+    }
     result["presentation_binding"] = bind_presentation(
         presentation=habitat["presentation"], source_frame=morph["source_frame"],
         habitat_alias=alias, generation=morph["generation"],
@@ -820,7 +853,8 @@ def place_morph(ledger: MorphTransferLedger, request: dict[str, Any], now: datet
     return habitat_status(ledger, morph["morph_id"], now)
 
 
-def care_for_morph(ledger: MorphTransferLedger, request: dict[str, Any], now: datetime) -> dict[str, Any]:
+def care_for_morph(ledger: MorphTransferLedger, request: dict[str, Any], now: datetime,
+                   *, origin: str = "OPERATOR") -> dict[str, Any]:
     _exact(request, {"schema", "event_id", "morph_id", "action"}, "care request")
     if request["schema"] != HABITAT_SCHEMA or request["action"] not in CARE_ACTIONS:
         raise TransferError("INVALID_CARE", "care action is not admitted")
@@ -834,31 +868,34 @@ def care_for_morph(ledger: MorphTransferLedger, request: dict[str, Any], now: da
     event_id = str(request["event_id"])
     if event_id in habitat["event_ids"]:
         return habitat_status(ledger, morph["morph_id"], now)
+    if origin not in {"OPERATOR", "ENVIRONMENT"}:
+        raise TransferError("INVALID_CARE_ORIGIN", "care origin is not admitted")
+    steps = 2 if origin == "OPERATOR" else 1
     payload = morph["snapshot"]["payload"]
     action = request["action"]
     if action == "FEED":
-        payload["food_q8"] = min(255, int(payload["food_q8"]) + 48)
+        before, after = _raise_care(payload, "food_q8", steps)
         payload["attention_q8"] = min(255, int(payload["attention_q8"]) + 8)
         payload["behavior"] = "FOOD"
         memory = {"code": "SOCIAL", "age_ms": 0, "weight": 80}
     elif action == "WATER":
-        payload["water_q8"] = min(255, int(payload["water_q8"]) + 48)
+        before, after = _raise_care(payload, "water_q8", steps)
         payload["attention_q8"] = min(255, int(payload["attention_q8"]) + 6)
         payload["behavior"] = "WATER"
         memory = {"code": "SOCIAL", "age_ms": 0, "weight": 72}
     elif action == "PLAY":
-        payload["play_q8"] = min(255, int(payload["play_q8"]) + 40)
+        before, after = _raise_care(payload, "play_q8", steps)
         payload["attention_q8"] = min(255, int(payload["attention_q8"]) + 18)
         payload["arousal_q8"] = min(255, int(payload["arousal_q8"]) + 20)
         payload["behavior"] = "PLAY"
         memory = {"code": "PLAY", "age_ms": 0, "weight": 220}
     elif action == "EXPLORE":
-        payload["attention_q8"] = min(255, int(payload["attention_q8"]) + 4)
+        before, after = _raise_care(payload, "attention_q8", steps)
         payload["arousal_q8"] = min(255, int(payload["arousal_q8"]) + 4)
         payload["behavior"] = "INVESTIGATE"
         memory = {"code": "NOVEL", "age_ms": 0, "weight": 40}
     else:
-        payload["rest_q8"] = min(255, int(payload["rest_q8"]) + 48)
+        before, after = _raise_care(payload, "rest_q8", steps)
         payload["fatigue_q8"] = max(0, int(payload["fatigue_q8"]) - 40)
         payload["arousal_q8"] = max(0, int(payload["arousal_q8"]) - 24)
         payload["behavior"] = "DOZE"
@@ -868,7 +905,8 @@ def care_for_morph(ledger: MorphTransferLedger, request: dict[str, Any], now: da
     habitat["last_tick_at"] = _iso(now)
     habitat["event_ids"].append(event_id)
     del habitat["event_ids"][:-HISTORY_CAPACITY]
-    _record(habitat, {"event_id": event_id, "at": _iso(now), "type": "CARE", "action": action})
+    _record(habitat, {"event_id": event_id, "at": _iso(now), "type": "CARE", "action": action,
+                      "origin": origin, "level_before": before, "level_after": after})
     _sync_morph_core_state(morph)
     refresh_snapshot(morph)
     return habitat_status(ledger, morph["morph_id"], now)
