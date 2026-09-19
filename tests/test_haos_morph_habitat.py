@@ -202,6 +202,34 @@ def test_nursery_graduates_once_after_72_hours_and_preserves_identity():
     assert notices_again == []
 
 
+def test_place_is_idempotent_and_enters_portable_nine_core_chronicle_once():
+    now = datetime(2026, 9, 19, tzinfo=UTC)
+    ledger = hosted_v3(now)
+    morph = ledger.data["morphs"]["pulse"]
+    core = morph["snapshot"]["payload"]["morph_core"]
+    chronicle = core.get("memory", {}).get("chronicle", core.get("chronicle"))
+    before = len(chronicle["events"])
+    request = {"schema": habitat.HABITAT_SCHEMA, "event_id": "place-gardens-1",
+               "morph_id": "pulse", "place": "SEREIN_GARDENS"}
+
+    habitat.place_morph(ledger, request, now)
+    core = morph["snapshot"]["payload"]["morph_core"]
+    chronicle = core.get("memory", {}).get("chronicle", core.get("chronicle"))
+    matching = [event for event in chronicle["events"] if event["event_id"] == "place-gardens-1"]
+    assert len(chronicle["events"]) == before + 1
+    assert len(matching) == 1
+    assert matching[0]["kind"] == "habitat-place"
+    assert matching[0]["place"] == "SEREIN_GARDENS"
+    assert len(matching[0]["evidence_digest"]) == 64
+
+    digest = morph["snapshot_digest"]
+    habitat.place_morph(ledger, request, now)
+    core = morph["snapshot"]["payload"]["morph_core"]
+    chronicle = core.get("memory", {}).get("chronicle", core.get("chronicle"))
+    assert len([event for event in chronicle["events"] if event["event_id"] == "place-gardens-1"]) == 1
+    assert morph["snapshot_digest"] == digest
+
+
 def test_horizon_water_comes_from_spring_pool_not_timed_care_script():
     now = datetime(2026, 9, 8, 8, tzinfo=UTC)
     ledger = hosted_v3(now)
@@ -772,3 +800,4 @@ def test_existing_founder_alignment_denies_unproven_role():
     with pytest.raises(transfer.TransferError) as error:
         ledger.align_existing_nine_core(request, now)
     assert error.value.code == "FOUNDER_ROLE_CONFLICT"
+

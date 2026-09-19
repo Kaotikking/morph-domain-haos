@@ -178,6 +178,15 @@ def test_habitat_list_does_not_reconcile_advance_or_save():
     assert obj.ledger.data == {"morphs": {}, "operations": {}}
 
 
+def test_habitat_history_does_not_reconcile_advance_or_save():
+    obj = manager()
+    result = asyncio.run(obj.handle_habitat("history", {"morph_id": "dustdevil"}))
+    assert result == {"events": []}
+    assert obj.store.writes == 0
+    assert obj.ledger.reconciliations == 0
+    assert obj.ledger.data == {"morphs": {}, "operations": {}}
+
+
 def test_get_routes_require_authentication_and_bind_exact_id():
     assert module.MorphTransferStatusView.requires_auth is True
     assert module.MorphTransferStatusView.url.endswith("/{transfer_id}")
@@ -185,6 +194,10 @@ def test_get_routes_require_authentication_and_bind_exact_id():
     assert habitat_module.MorphHabitatStatusView.url.endswith("/{morph_id}")
     assert habitat_module.MorphHabitatListView.requires_auth is True
     assert habitat_module.MorphHabitatListView.url.endswith("/list")
+    assert habitat_module.MorphHabitatHistoryView.requires_auth is True
+    assert habitat_module.MorphHabitatHistoryView.url.endswith("/{morph_id}")
+    assert habitat_module.MorphHabitatRuntimeView.requires_auth is True
+    assert habitat_module.MorphHabitatRuntimeView.url.endswith("/runtime")
 
 
 def test_get_routes_use_existing_pure_status_actions():
@@ -202,6 +215,10 @@ def test_get_routes_use_existing_pure_status_actions():
     list_view.json = lambda payload, status_code=200: (status_code, payload)
     status, payload = asyncio.run(list_view.get(request))
     assert status == 200 and payload["result"] == {"morphs": []}
+    history_view = habitat_module.MorphHabitatHistoryView()
+    history_view.json = lambda payload, status_code=200: (status_code, payload)
+    status, payload = asyncio.run(history_view.get(request, "dustdevil"))
+    assert status == 200 and payload["result"] == {"events": []}
     assert obj.store.writes == 0
     assert obj.ledger.reconciliations == 0
 
@@ -213,3 +230,4 @@ def test_mutation_still_reconciles_and_persists():
     assert obj.store.writes == 1
     assert obj.ledger.reconciliations == 1
     assert obj.ledger.data["expired"] is True
+

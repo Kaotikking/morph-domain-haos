@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+import logging
 import uuid
 from typing import Any
 
@@ -14,6 +16,9 @@ from .morph_transfer import DATA_KEY, MorphTransferManager, TransferError
 from .http_policy import admin_authorized
 from .sern import SernEnvelopeError, validate_envelope
 from ._vendor.morph_engine.habitat import *
+
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class MorphSernView(HomeAssistantView):
@@ -102,12 +107,47 @@ class MorphHabitatListView(HomeAssistantView):
             return self.json({"ok": False, "error": {"code": err.code, "message": str(err)}}, status_code=409)
 
 
+class MorphHabitatHistoryView(HomeAssistantView):
+    """Authenticated, side-effect-free bounded habitat history."""
+
+    url = "/api/morph-domain/v1/habitat/history/{morph_id}"
+    name = "api:morph-domain:v1:habitat:history:get"
+    requires_auth = True
+
+    async def get(self, request: Any, morph_id: str) -> Any:
+        manager: MorphTransferManager = request.app["hass"].data[DATA_KEY]
+        try:
+            result = await manager.handle_habitat("history", {"morph_id": morph_id})
+            return self.json({"ok": True, "result": result})
+        except TransferError as err:
+            return self.json({"ok": False, "error": {"code": err.code, "message": str(err)}}, status_code=409)
+
+
+class MorphHabitatRuntimeView(HomeAssistantView):
+    """Authenticated scheduler witness; reading it never advances Morph life."""
+
+    url = "/api/morph-domain/v1/habitat/runtime"
+    name = "api:morph-domain:v1:habitat:runtime:get"
+    requires_auth = True
+
+    async def get(self, request: Any) -> Any:
+        state = request.app["hass"].data.get(HABITAT_DATA_KEY, {})
+        return self.json({"ok": True, "result": {
+            "registered": bool(state),
+            "last_started_at": state.get("last_started_at") if isinstance(state, dict) else None,
+            "last_succeeded_at": state.get("last_succeeded_at") if isinstance(state, dict) else None,
+            "last_error": state.get("last_error") if isinstance(state, dict) else None,
+        }})
+
+
 async def async_setup_morph_habitat(hass: HomeAssistant) -> None:
     if HABITAT_DATA_KEY in hass.data:
         return
     hass.http.register_view(MorphHabitatView)
     hass.http.register_view(MorphHabitatStatusView)
     hass.http.register_view(MorphHabitatListView)
+    hass.http.register_view(MorphHabitatHistoryView)
+    hass.http.register_view(MorphHabitatRuntimeView)
     hass.http.register_view(MorphSernView)
     async def handle_place(call: Any) -> None:
         await hass.data[DATA_KEY].handle_habitat("place", {
@@ -133,12 +173,33 @@ async def async_setup_morph_habitat(hass: HomeAssistant) -> None:
         "morph_domain", "morph_care", handle_care,
         schema={"morph_id": str, "action": vol.In(sorted(CARE_ACTIONS))},
     )
-    async def async_tick_habitats(_: Any) -> None:
-        """Run the engine tick on Home Assistant's event loop."""
-        await hass.data[DATA_KEY].tick_habitats()
+    runtime = {
+        "cancel": None,
+        "last_started_at": None,
+        "last_succeeded_at": None,
+        "last_error": None,
+    }
+    hass.data[HABITAT_DATA_KEY] = runtime
 
-    hass.data[HABITAT_DATA_KEY] = async_track_time_interval(
+    async def async_tick_habitats(_: Any) -> None:
+        """Run one fault-contained engine tick and retain an API witness."""
+        runtime["last_started_at"] = datetime.now(UTC).isoformat()
+        try:
+            await hass.data[DATA_KEY].tick_habitats()
+        except Exception as err:  # Home Assistant must schedule the next tick.
+            runtime["last_error"] = f"{type(err).__name__}: {err}"
+            _LOGGER.exception("MorphDomain habitat tick failed; the next interval remains scheduled")
+            return
+        runtime["last_succeeded_at"] = datetime.now(UTC).isoformat()
+        runtime["last_error"] = None
+
+    # Catch up immediately after a reload/restart, then continue every 30 s.
+    # This prevents a reload boundary from leaving every Morph frozen until an
+    # unrelated mutation happens to advance the ledger.
+    await async_tick_habitats(None)
+    runtime["cancel"] = async_track_time_interval(
         hass,
         async_tick_habitats,
         TICK_INTERVAL,
     )
+

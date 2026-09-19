@@ -35,10 +35,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if not unloaded:
         return False
-    cancel = hass.data.pop(HABITAT_DATA_KEY, None)
+    runtime = hass.data.pop(HABITAT_DATA_KEY, None)
+    cancel = runtime.get("cancel") if isinstance(runtime, dict) else runtime
     if cancel is not None:
         cancel()
     hass.services.async_remove(DOMAIN, "morph_place")
     hass.services.async_remove(DOMAIN, "morph_care")
     hass.data.pop(DATA_KEY, None)
     return True
+

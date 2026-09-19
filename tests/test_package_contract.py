@@ -58,9 +58,9 @@ def test_gender_is_presentation_not_dna():
 def test_morph_first_operator_panel_is_packaged():
     setup = (COMPONENT / "__init__.py").read_text(encoding="utf-8")
     panel = (COMPONENT / "frontend/morph-domain-panel.js").read_text(encoding="utf-8")
-    assert 'frontend_url_path=PANEL_PATH' in setup
-    assert 'require_admin=True' in setup
-    assert 'this._hass.callApi("POST","morph-domain/v1/habitat/list",{})' in panel
+    assert 'StaticPathConfig(CARD_PATH' in setup
+    assert 'async_register_static_paths' in setup
+    assert 'this._hass.callApi("GET","morph-domain/v1/habitat/list")' in panel
     assert 'this._hass.callApi("POST","morph-domain/v1/habitat/starter-status",{})' in panel
     assert 'data-starter=' in panel
     assert 'gen1-preview' in panel
@@ -109,4 +109,5 @@ def test_scheduler_awaits_tick_on_home_assistant_event_loop():
     assert "async def async_tick_habitats" in habitat
     assert "await hass.data[DATA_KEY].tick_habitats()" in habitat
     assert "lambda _: hass.async_create_task" not in habitat
+
 

@@ -849,6 +849,27 @@ def place_morph(ledger: MorphTransferLedger, request: dict[str, Any], now: datet
     del habitat["event_ids"][:-HISTORY_CAPACITY]
     _record(habitat, {"event_id": event_id, "at": _iso(now), "type": "PLACE", "from": previous, "to": request["place"]})
     _sync_morph_core_state(morph, sync_place=True)
+    evidence = {
+        "schema": HABITAT_SCHEMA,
+        "event_id": event_id,
+        "morph_id": morph["morph_id"],
+        "from": previous,
+        "to": request["place"],
+        "observed_at": _iso(now),
+    }
+    # Legacy v2 fixtures remain movable, but only an admitted nine-core Morph
+    # has a portable chronicle. The inbound alignment reflex upgrades those
+    # Morphs before they can claim nine-core movement history.
+    if isinstance(morph.get("snapshot", {}).get("payload", {}).get("morph_core"), dict):
+        _append_world_chronicle(morph, {
+            "event_id": event_id,
+            "kind": "habitat-place",
+            "observed_at": _iso(now),
+            "source": "haos-morph-engine",
+            "place": request["place"],
+            "frame": f"haos-{request['place'].lower().replace('_', '-')}",
+            "evidence_digest": sha256(canonical_json(evidence).encode()).hexdigest(),
+        }, now)
     refresh_snapshot(morph)
     return habitat_status(ledger, morph["morph_id"], now)
 
@@ -1054,3 +1075,4 @@ def call_morph(ledger: MorphTransferLedger, request: dict[str, Any], now: dateti
         "state": "CALL_READY",
         "transfer_required": True,
     }
+
