@@ -50,3 +50,81 @@ recall_to_horizon:
       selector:
         text:
 
+code_haven_admit:
+  name: Admit Morph to Code Haven
+  description: Preserve the prior place and digest, then enter the only Morph-state write boundary.
+  fields:
+    morph_id:
+      name: Morph ID
+      required: true
+      selector:
+        text:
+    reason:
+      name: Diagnostic reason
+      required: false
+      selector:
+        text:
+
+code_haven_discharge:
+  name: Discharge Morph from Code Haven
+  description: Release a Morph only against its open Code Haven admission receipt.
+  fields:
+    morph_id:
+      name: Morph ID
+      required: true
+      selector:
+        text:
+    target_place:
+      name: Destination
+      required: false
+      default: HORIZON
+      selector:
+        select:
+          options: [HORIZON]
+
+nursery_pair_admit:
+  name: Admit Morph pair to Nursery
+  description: Atomically admit two eligible Morphs and begin the five-second compatibility window.
+  fields:
+    first_morph_id:
+      name: First Morph ID
+      required: true
+      selector:
+        text:
+    second_morph_id:
+      name: Second Morph ID
+      required: true
+      selector:
+        text:
+
+recover_transfers:
+  name: Recover interrupted Morph transfers
+  description: Reconcile expired and interrupted transactions without inventing custody or identity.
+
+void_enter:
+  name: Enter Void stasis
+  description: Snapshot the Morph, stop time, and enforce the canonical 24-hour withdrawal lock.
+  fields:
+    morph_id:
+      name: Morph ID
+      required: true
+      selector:
+        text:
+
+void_withdraw:
+  name: Withdraw from Void
+  description: Restore the exact stasis snapshot after the lock, routing to Horizon or Code Haven.
+  fields:
+    morph_id:
+      name: Morph ID
+      required: true
+      selector:
+        text:
+    target_place:
+      name: Destination
+      required: false
+      default: HORIZON
+      selector:
+        select:
+          options: [HORIZON, CODE_HAVEN]
+
