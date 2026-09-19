@@ -77,7 +77,9 @@ def test_frozen_sentinel_recall_builds_an_admissible_next_generation():
         now)
     ledger = adapter.MorphTransferLedger({"schema": adapter.API_SCHEMA, "morphs": {morph_id: morph}, "operations": {}})
     prepared = ledger.prepare_inbound(offer, now)
+    # The transport revision advances; immutable Morph lineage generation does not.
     assert prepared["generation"] == 3
+    assert offer["snapshot"]["payload"]["morph_core"]["root"]["identity"]["generation"] == 0
     assert offer["snapshot"]["payload"]["morph_core"]["cloud"]["authority"] == "HAOS_ACTIVE"
     assert offer["snapshot"]["payload"]["morph_core"]["memory"]["life"]["journey_count"] == 2
 
