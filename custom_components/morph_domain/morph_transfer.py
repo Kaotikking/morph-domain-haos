@@ -243,7 +243,7 @@ class MorphTransferManager:
             candidate = MorphTransferLedger(deepcopy(self.ledger.data))
             # A habitat read must not advance time, expire an operation, or
             # save any Morph state. The scheduler owns elapsed-life work.
-            changed = False if action_is_read("habitat", action) else candidate.reconcile_expired(now)
+            changed = False if action_is_read("habitat", action) or action == "recover-transfers" else candidate.reconcile_expired(now)
             self.metrics.record_expiry_reconciliation(changed=changed)
             # The periodic scheduler is the only owner of elapsed-life advancement.
             # Reading the dashboard/API must never advance life or sample HAOS.
@@ -264,15 +264,64 @@ class MorphTransferManager:
             elif action == "starter-hatch":
                 result = hatch_starter(candidate, body, now)
                 changed = True
+            elif action == "egg-hatch":
+                from .morph_habitat import hatch_egg
+                result = hatch_egg(candidate, body, now)
+                changed = True
             elif action == "status":
                 _exact(body, {"morph_id"}, "habitat status request")
                 result = habitat_status(candidate, str(body["morph_id"]), now)
+            elif action == "window":
+                from ._vendor.morph_engine.morph_window import build_morph_window
+                _exact(body, {"morph_id"}, "Morph Window request")
+                status = habitat_status(candidate, str(body["morph_id"]), now)
+                result = build_morph_window(status, candidate.data["operations"], now)
             elif action == "place":
                 result = place_morph(candidate, body, now)
                 changed = True
             elif action == "care":
                 result = care_for_morph(candidate, body, now)
                 changed = True
+            elif action == "environment-interaction":
+                from .morph_habitat import apply_environment_interaction
+                _exact(body, {"schema", "event_id", "morph_id", "activity"}, "environment interaction request")
+                if body["schema"] != "serein.morph-foundation-reflex.v1":
+                    raise TransferError("INVALID_SCHEMA", "environment reflex schema is not admitted")
+                result = apply_environment_interaction(candidate, morph_id=str(body["morph_id"]),
+                    event_id=str(body["event_id"]), activity=str(body["activity"]), now=now)
+                changed = True
+            elif action == "code-haven-admit":
+                from .morph_habitat import admit_code_haven
+                result = admit_code_haven(candidate, body, now)
+                changed = True
+            elif action == "code-haven-discharge":
+                from .morph_habitat import discharge_code_haven
+                result = discharge_code_haven(candidate, body, now)
+                changed = True
+            elif action == "nursery-pair-admit":
+                from .morph_habitat import admit_nursery_pair
+                result = admit_nursery_pair(candidate, body, now)
+                changed = True
+            elif action == "void-enter":
+                from .morph_habitat import enter_void_stasis
+                result = enter_void_stasis(candidate, body, now)
+                changed = True
+            elif action == "void-withdraw":
+                from .morph_habitat import withdraw_void_stasis
+                result = withdraw_void_stasis(candidate, body, now)
+                changed = True
+            elif action == "recover-transfers":
+                _exact(body, {"schema", "event_id"}, "transfer recovery request")
+                if body["schema"] != "serein.morph-foundation-reflex.v1":
+                    raise TransferError("INVALID_SCHEMA", "recovery schema is not admitted")
+                before = {key: value.get("state") for key, value in candidate.data["operations"].items()}
+                recovered = candidate.reconcile_expired(now)
+                after = {key: value.get("state") for key, value in candidate.data["operations"].items()}
+                changed_ids = sorted(key for key in after if before.get(key) != after.get(key))
+                result = {"schema": "serein.morph-foundation-reflex.v1", "reflex": "TRANSFER_RECOVERY",
+                    "event_id": body["event_id"], "changed": recovered, "operation_ids": changed_ids,
+                    "state": "RECONCILED" if recovered else "NO_PENDING_RECOVERY"}
+                changed = recovered or changed
             elif action == "game-start":
                 from .morph_habitat import start_garden_game
                 result = start_garden_game(candidate, body, now)
