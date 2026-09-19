@@ -123,6 +123,14 @@ def test_horizon_low_need_selects_real_care_not_just_a_log_entry():
     assert status["care_levels"]["food"] == 2
     assert status["social"]["last_activity"]["kind"] == "EAT"
     assert status["snapshot_digest"] != before
+    call = status["life_call"]["recent"][-1]
+    assert call["schema"] == "serein.morph-life-call.v1"
+    assert call["need_class"] == "EAT"
+    assert call["preferred_channel"] == "MORPH_LOCAL"
+    assert call["state"] == "RESOLVED"
+    assert call["resolution"]["resolver"] == "ENVIRONMENT"
+    assert status["life_call"]["active"] is None
+    assert status["life_call"]["presentation_policy"] == "DEVICE_DECIDES"
     assert not habitat.run_social_reflexes(ledger, now)
     assert habitat.habitat_status(ledger, "pulse", now)["life"]["food_q8"] == 102
 
@@ -200,3 +208,4 @@ def test_lineage_is_an_encounter_preference_not_an_instant_relationship():
     ember["snapshot"]["payload"]["morph_core"]["identity"]["founder_lineage"] = "founder:other"
     assert engine._kinship_score(pulse, ember) == 0
     assert habitat.habitat_status(ledger, "pulse", now)["social"]["edges"] == {}
+
