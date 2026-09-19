@@ -22,6 +22,7 @@ from ..morph_sdk.transfer import (
 from ..morph_sdk.morph_core import (MAX_CHRONICLE_EVENTS, MORPH_NINE_CORE_SCHEMA,
                                    validate_morph_core, verify_successor)
 from ..morph_sdk.gen1_origin import ORIGIN_SCHEMA, hatch_starter
+from ..morph_sdk.word_pools_v1 import hatch_name
 from ..morph_sdk.dna_v1 import SOCIAL_SCHEMA, SOCIAL_STATES
 from ..morph_sdk.ump_world import decide_pair, choose_horizon_activity
 from .garden_games import GardenGameError, start_game, move as game_move, public_state
@@ -51,6 +52,9 @@ SOCIAL_WINDOW_SECONDS = 2 * 60 * 60
 HORIZON_WINDOW_SECONDS = 5 * 60
 SOCIAL_NEED_FLOOR = 64
 REFLEX_SCHEMA = "serein.morph-reflex.v1"
+FOUNDATION_REFLEX_SCHEMA = "serein.morph-foundation-reflex.v1"
+LIFE_CALL_SCHEMA = "serein.morph-life-call.v1"
+LIFE_CALL_WINDOW = timedelta(minutes=15)
 CARE_FIELDS = ("food_q8", "water_q8", "play_q8", "rest_q8", "attention_q8")
 CARE_LEVEL_CEILINGS = (51, 102, 153, 204, 255)
 
@@ -136,6 +140,7 @@ def _habitat(morph: dict[str, Any], now: datetime) -> dict[str, Any]:
             "founder_axes": {},
             "social": {"edges": {}, "event_ids": [], "last_activity": None},
             "games": {"sessions": {}, "last_reward_window": None},
+            "life_calls": {"active": None, "recent": []},
             "reflex": {
                 "schema": REFLEX_SCHEMA,
                 "last_care_window": None,
@@ -156,6 +161,7 @@ def _habitat(morph: dict[str, Any], now: datetime) -> dict[str, Any]:
     habitat.setdefault("founder_axes", {})
     habitat.setdefault("social", {"edges": {}, "event_ids": [], "last_activity": None})
     habitat.setdefault("games", {"sessions": {}, "last_reward_window": None})
+    habitat.setdefault("life_calls", {"active": None, "recent": []})
     habitat.setdefault("reflex", {
         "schema": REFLEX_SCHEMA,
         "last_care_window": None,
@@ -405,13 +411,11 @@ def run_automatic_reflexes(
         if not embodiment:
             embodiment = core.get("embodiment", {})
         sealed_egg = embodiment.get("body_class") == "morph-egg"
-        starter = str(morph.get("founder_id", "")) in {"L1-01", "L1-02", "L1-03", "L1-04"}
         elapsed_ready = int(habitat["nursery_elapsed_seconds"]) >= int(NURSERY_GRADUATION.total_seconds())
-        if habitat["place"] == "NURSERY" and starter and sealed_egg and elapsed_ready:
+        if habitat["place"] == "NURSERY" and sealed_egg and elapsed_ready:
             hatch_id = f"auto-hatch:{morph_id}"
-            hatch_starter(ledger, {
-                "schema": ORIGIN_SCHEMA, "event_id": hatch_id, "morph_id": morph_id,
-            }, now)
+            hatch_egg(ledger, {"schema": FOUNDATION_REFLEX_SCHEMA,
+                "event_id": hatch_id, "morph_id": morph_id}, now)
             notices.append({"id": hatch_id, "kind": "HATCHED", "morph_id": morph_id})
             changed = True
             sealed_egg = False
@@ -444,6 +448,59 @@ def run_automatic_reflexes(
                 notices.append({"id": notice_id, "kind": "INTERVENTION", "morph_id": morph_id})
                 changed = True
     return changed, notices
+
+
+def hatch_egg(ledger: MorphTransferLedger, request: dict[str, Any], now: datetime) -> dict[str, Any]:
+    """Hatch any admitted Nursery egg; Gen-1 starters retain their exact legacy contract."""
+    _exact(request, {"schema", "event_id", "morph_id"}, "egg hatch request")
+    if request["schema"] != FOUNDATION_REFLEX_SCHEMA:
+        raise TransferError("INVALID_SCHEMA", "egg hatch schema is not admitted")
+    morph_id, event_id = str(request["morph_id"]), str(request["event_id"])
+    morph = ledger.data["morphs"].get(morph_id)
+    if not morph:
+        raise TransferError("NOT_FOUND", "egg is not admitted")
+    existing = ledger.data["operations"].get(event_id)
+    if existing:
+        if existing.get("operation_kind") != "MORPH_EGG_HATCH" or existing.get("morph_id") != morph_id:
+            raise TransferError("REPLAY_CONFLICT", "hatch identity changed")
+        return deepcopy(existing["result"])
+    if str(morph.get("founder_id", "")) in {"L1-01", "L1-02", "L1-03", "L1-04"}:
+        legacy = hatch_starter(ledger, {"schema": ORIGIN_SCHEMA, "event_id": f"{event_id}:starter",
+            "morph_id": morph_id}, now)
+        result = {**legacy, "schema": FOUNDATION_REFLEX_SCHEMA, "reflex": "HATCH_AND_NAME"}
+    else:
+        _require_haos(morph)
+        habitat = _habitat(morph, now)
+        core = morph.get("snapshot", {}).get("payload", {}).get("morph_core", {})
+        embodiment = core.get("platform", {}).get("embodiment", core.get("embodiment", {}))
+        if habitat["place"] != "NURSERY" or embodiment.get("body_class") != "morph-egg":
+            raise TransferError("HATCH_PRESTATE_MISMATCH", "sealed HAOS Nursery egg is required")
+        identity = core.get("root", {}).get("identity", core.get("identity", {}))
+        element = str(identity.get("primitive_element", "EARTH")).upper()
+        if element not in ELEMENTS:
+            element = "EARTH"
+        display_name = hatch_name(morph_id=morph_id, genome_sha256=morph["genome_sha256"], element=element)
+        new_body = {"body_id": f"{element.lower()}-juvenile", "body_class": "morph-juvenile",
+                    "capabilities": ["care", "interact"]}
+        if "platform" in core:
+            core["platform"]["embodiment"] = new_body
+            core["modular"]["capabilities"] = ["care", "interact"]
+            core["ui"]["expression"] = "juvenile"
+        else:
+            core["embodiment"] = new_body
+        morph["presentation"] = {"display_name": display_name, "name_source": "POOL_A",
+            "name_version": "gen1-word-pools-v1", "named_at": _iso(now)}
+        append_nine_core_event(morph, {"event_id": event_id, "kind": "morph-hatch",
+            "observed_at": _iso(now), "source": "haos-morphdomain", "place": "NURSERY",
+            "frame": "haos-nursery", "evidence_digest": sha256(canonical_json({"morph_id": morph_id,
+            "display_name": display_name}).encode()).hexdigest()})
+        refresh_snapshot(morph)
+        result = {"schema": FOUNDATION_REFLEX_SCHEMA, "reflex": "HATCH_AND_NAME", "state": "HATCHED",
+            "morph_id": morph_id, "display_name": display_name, "element": element,
+            "place": "NURSERY", "snapshot_digest": morph["snapshot_digest"], "authority": "HAOS"}
+    ledger.data["operations"][event_id] = {"operation_kind": "MORPH_EGG_HATCH", "state": "COMMITTED",
+        "morph_id": morph_id, "created_at": _iso(now), "result": deepcopy(result)}
+    return result
 
 
 def _social_subject(morph: dict[str, Any], now: datetime) -> dict[str, Any] | None:
@@ -622,9 +679,14 @@ def run_social_reflexes(ledger: MorphTransferLedger, now: datetime) -> bool:
             except (KeyError, WorldObjectError):
                 # Unknown element is not permission to invent a rest scene.
                 continue
+        life_call = _open_life_call(
+            habitat, morph_id=morph_id, need_class=decision["activity"], now=now,
+            preferred_responder="ENVIRONMENT", preferred_channel="MORPH_LOCAL")
         apply_environment_interaction(
             ledger, morph_id=morph_id, event_id=f"{event_id}:environment",
             activity=decision["activity"], now=now)
+        _resolve_life_call(habitat, life_call["call_id"], resolver="ENVIRONMENT",
+                           outcome=object_id, now=now)
         habitat["social"]["event_ids"].append(event_id)
         del habitat["social"]["event_ids"][:-HISTORY_CAPACITY]
         habitat["social"]["last_activity"] = {"at": _iso(now), "kind": decision["activity"],
@@ -641,6 +703,47 @@ def run_social_reflexes(ledger: MorphTransferLedger, now: datetime) -> bool:
                                   participants=(morph_id,), willing={morph_id: True}, now=now)
         changed = True
     return changed
+
+
+def _open_life_call(habitat: dict[str, Any], *, morph_id: str, need_class: str,
+                    now: datetime, preferred_responder: str,
+                    preferred_channel: str) -> dict[str, Any]:
+    """Open one neutral SERN-ready intention; presentation remains frame policy."""
+    calls = habitat.setdefault("life_calls", {"active": None, "recent": []})
+    existing = calls.get("active")
+    if isinstance(existing, dict) and existing.get("state") == "OPEN":
+        return existing
+    call_id = f"life-call:{morph_id}:{int(now.timestamp())}"
+    call = {
+        "schema": LIFE_CALL_SCHEMA, "call_id": call_id, "morph_id": morph_id,
+        "need_class": str(need_class).upper(), "opened_at": _iso(now),
+        "expires_at": _iso(now + LIFE_CALL_WINDOW),
+        "preferred_responder": preferred_responder,
+        "preferred_channel": preferred_channel, "state": "OPEN",
+        "resolution": None,
+    }
+    calls["active"] = call
+    _record(habitat, {"event_id": call_id, "at": _iso(now), "type": "LIFE_CALL",
+                      "need_class": call["need_class"], "channel": preferred_channel})
+    return call
+
+
+def _resolve_life_call(habitat: dict[str, Any], call_id: str, *, resolver: str,
+                       outcome: str, now: datetime) -> dict[str, Any]:
+    calls = habitat.setdefault("life_calls", {"active": None, "recent": []})
+    call = calls.get("active")
+    if not isinstance(call, dict) or call.get("call_id") != call_id:
+        raise TransferError("LIFE_CALL_NOT_FOUND", "active Morph life call was not found")
+    call["state"] = "RESOLVED"
+    call["resolution"] = {"resolver": resolver, "outcome": outcome,
+                          "resolved_at": _iso(now)}
+    calls["recent"].append(deepcopy(call))
+    del calls["recent"][:-8]
+    calls["active"] = None
+    _record(habitat, {"event_id": f"{call_id}:resolved", "at": _iso(now),
+                      "type": "LIFE_CALL_RESOLVED", "call_id": call_id,
+                      "resolver": resolver, "outcome": outcome})
+    return deepcopy(call)
 
 
 def interact_world_object(ledger: MorphTransferLedger, *, event_id: str, place: str,
@@ -812,6 +915,12 @@ def habitat_status(ledger: MorphTransferLedger, morph_id: str, now: datetime) ->
     source_frame = str(morph["source_frame"])
     dedicated_frame = bool(source_frame and source_frame.lower() != "unknown"
                            and not source_frame.lower().startswith("haos-"))
+    open_haven_admission = next((operation_id for operation_id, operation in reversed(list(ledger.data["operations"].items()))
+        if operation.get("operation_kind") == "CODE_HAVEN_ADMISSION"
+        and operation.get("morph_id") == morph["morph_id"] and operation.get("state") == "ADMITTED"), None)
+    open_stasis = next((operation_id for operation_id, operation in reversed(list(ledger.data["operations"].items()))
+        if operation.get("operation_kind") == "VOID_STASIS"
+        and operation.get("morph_id") == morph["morph_id"] and operation.get("state") == "STASIS"), None)
     result = {
         "schema": HABITAT_SCHEMA,
         "morph_id": morph["morph_id"],
@@ -843,9 +952,23 @@ def habitat_status(ledger: MorphTransferLedger, morph_id: str, now: datetime) ->
                                    and habitat["place"] == "HORIZON"),
             "recall_available": bool(dedicated_frame and morph["authority"] == source_frame),
         },
+        "foundation_reflex": {
+            "schema": FOUNDATION_REFLEX_SCHEMA,
+            "code_haven_admission_id": open_haven_admission,
+            "void_stasis_id": open_stasis,
+            "hatch_available": habitat["place"] == "NURSERY" and (
+                morph.get("snapshot", {}).get("payload", {}).get("morph_core", {}).get("platform", {}).get("embodiment", {}).get("body_class") == "morph-egg"
+                or morph.get("snapshot", {}).get("payload", {}).get("morph_core", {}).get("embodiment", {}).get("body_class") == "morph-egg"),
+            "battle_gate": "BLOCKED_UNTIL_REFLEXES_1_9_PROVEN",
+        },
         "founder_axes": deepcopy(habitat["founder_axes"]),
         "social": deepcopy(habitat["social"]),
         "games": [public_state(session) for session in habitat["games"]["sessions"].values()],
+        "life_call": {
+            "active": deepcopy(habitat["life_calls"].get("active")),
+            "recent": deepcopy(habitat["life_calls"].get("recent", [])[-3:]),
+            "presentation_policy": "DEVICE_DECIDES",
+        },
         "automatic_reflex": deepcopy(habitat["reflex"]),
         "life": deepcopy(morph["snapshot"]["payload"]),
     }
@@ -914,6 +1037,177 @@ def place_morph(ledger: MorphTransferLedger, request: dict[str, Any], now: datet
         }, now)
     refresh_snapshot(morph)
     return habitat_status(ledger, morph["morph_id"], now)
+
+
+def admit_code_haven(ledger: MorphTransferLedger, request: dict[str, Any], now: datetime) -> dict[str, Any]:
+    """Atomically admit one HAOS-owned Morph to the only mutable write boundary."""
+    _exact(request, {"schema", "event_id", "morph_id", "reason"}, "Code Haven admission")
+    if request["schema"] != FOUNDATION_REFLEX_SCHEMA:
+        raise TransferError("INVALID_SCHEMA", "Code Haven admission schema is not admitted")
+    morph = ledger.data["morphs"].get(str(request["morph_id"]))
+    if not morph:
+        raise TransferError("NOT_FOUND", "Morph is not admitted")
+    _require_haos(morph)
+    habitat = _habitat(morph, now)
+    event_id = str(request["event_id"])
+    existing = ledger.data["operations"].get(event_id)
+    if existing:
+        if existing.get("operation_kind") != "CODE_HAVEN_ADMISSION" or existing.get("morph_id") != morph["morph_id"]:
+            raise TransferError("REPLAY_CONFLICT", "Code Haven admission identity changed")
+        return deepcopy(existing["result"])
+    if habitat["place"] == "VOID":
+        raise TransferError("VOID_WITHDRAWAL_REQUIRED", "Void must release the exact snapshot before Code Haven admission")
+    prior_place = habitat["place"]
+    prior_digest = morph["snapshot_digest"]
+    status = place_morph(ledger, {"schema": HABITAT_SCHEMA, "event_id": f"{event_id}:place",
+        "morph_id": morph["morph_id"], "place": "CODE_HAVEN"}, now)
+    result = {"schema": FOUNDATION_REFLEX_SCHEMA, "reflex": "CODE_HAVEN_ADMIT",
+        "event_id": event_id, "morph_id": morph["morph_id"], "prior_place": prior_place,
+        "prior_snapshot_digest": prior_digest, "snapshot_digest": status["snapshot_digest"],
+        "reason": str(request["reason"]), "state": "ADMITTED", "place": "CODE_HAVEN"}
+    ledger.data["operations"][event_id] = {"operation_kind": "CODE_HAVEN_ADMISSION",
+        "state": "ADMITTED", "morph_id": morph["morph_id"], "created_at": _iso(now),
+        "result": deepcopy(result)}
+    return result
+
+
+def discharge_code_haven(ledger: MorphTransferLedger, request: dict[str, Any], now: datetime) -> dict[str, Any]:
+    """Release one admitted Morph only after a bound Code Haven receipt exists."""
+    _exact(request, {"schema", "event_id", "morph_id", "admission_id", "target_place"}, "Code Haven discharge")
+    if request["schema"] != FOUNDATION_REFLEX_SCHEMA or request["target_place"] != "HORIZON":
+        raise TransferError("INVALID_DISCHARGE", "Code Haven discharges through Horizon")
+    morph = ledger.data["morphs"].get(str(request["morph_id"]))
+    if not morph:
+        raise TransferError("NOT_FOUND", "Morph is not admitted")
+    _require_haos(morph)
+    habitat = _habitat(morph, now)
+    if habitat["place"] != "CODE_HAVEN":
+        raise TransferError("CODE_HAVEN_REQUIRED", "Morph is not in Code Haven")
+    admission = ledger.data["operations"].get(str(request["admission_id"]))
+    if not admission or admission.get("operation_kind") != "CODE_HAVEN_ADMISSION" or admission.get("morph_id") != morph["morph_id"]:
+        raise TransferError("ADMISSION_RECEIPT_REQUIRED", "discharge requires the matching Code Haven admission")
+    event_id = str(request["event_id"])
+    existing = ledger.data["operations"].get(event_id)
+    if existing:
+        if existing.get("operation_kind") != "CODE_HAVEN_DISCHARGE" or existing.get("morph_id") != morph["morph_id"]:
+            raise TransferError("REPLAY_CONFLICT", "Code Haven discharge identity changed")
+        return deepcopy(existing["result"])
+    status = place_morph(ledger, {"schema": HABITAT_SCHEMA, "event_id": f"{event_id}:place",
+        "morph_id": morph["morph_id"], "place": request["target_place"]}, now)
+    result = {"schema": FOUNDATION_REFLEX_SCHEMA, "reflex": "CODE_HAVEN_DISCHARGE",
+        "event_id": event_id, "admission_id": request["admission_id"], "morph_id": morph["morph_id"],
+        "snapshot_digest": status["snapshot_digest"], "state": "DISCHARGED", "place": status["place"]}
+    ledger.data["operations"][event_id] = {"operation_kind": "CODE_HAVEN_DISCHARGE",
+        "state": "DISCHARGED", "morph_id": morph["morph_id"], "created_at": _iso(now),
+        "result": deepcopy(result)}
+    admission["state"] = "DISCHARGED"
+    admission["discharge_id"] = event_id
+    return result
+
+
+def admit_nursery_pair(ledger: MorphTransferLedger, request: dict[str, Any], now: datetime) -> dict[str, Any]:
+    """Move an eligible pair together or leave both untouched."""
+    _exact(request, {"schema", "event_id", "first_morph_id", "second_morph_id"}, "Nursery pair admission")
+    if request["schema"] != FOUNDATION_REFLEX_SCHEMA:
+        raise TransferError("INVALID_SCHEMA", "Nursery pair schema is not admitted")
+    ids = (str(request["first_morph_id"]), str(request["second_morph_id"]))
+    if not all(ids) or ids[0] == ids[1]:
+        raise TransferError("INVALID_PAIR", "two different Morphs are required")
+    event_id = str(request["event_id"])
+    existing = ledger.data["operations"].get(event_id)
+    if existing:
+        if existing.get("operation_kind") != "NURSERY_PAIR_ADMISSION" or tuple(existing.get("morph_ids", ())) != ids:
+            raise TransferError("REPLAY_CONFLICT", "Nursery pair identity changed")
+        return deepcopy(existing["result"])
+    morphs = [ledger.data["morphs"].get(morph_id) for morph_id in ids]
+    if any(morph is None for morph in morphs):
+        raise TransferError("NOT_FOUND", "both Morphs must be admitted")
+    for morph in morphs:
+        _require_haos(morph)
+        habitat = _habitat(morph, now)
+        if habitat["place"] not in {"HORIZON", "SEREIN_GARDENS"}:
+            raise TransferError("PAIR_PRESTATE_MISMATCH", "both Morphs must be active in Horizon or Gardens")
+        phase = str(morph.get("snapshot", {}).get("payload", {}).get("morph_core", {}).get("root", {}).get("identity", {}).get("life_stage", "MATURE"))
+        if phase not in {"MATURE", "AWAKENED"}:
+            raise TransferError("MATURITY_REQUIRED", "both Morphs must be mature")
+    for index, morph in enumerate(morphs):
+        place_morph(ledger, {"schema": HABITAT_SCHEMA, "event_id": f"{event_id}:pair:{index}",
+            "morph_id": morph["morph_id"], "place": "NURSERY"}, now)
+    compatibility = max(0, min(255, 128 + _kinship_score(morphs[0], morphs[1])))
+    result = {"schema": FOUNDATION_REFLEX_SCHEMA, "reflex": "NURSERY_PAIR_ADMIT",
+        "event_id": event_id, "morph_ids": list(ids), "state": "SOCIALIZING",
+        "compatibility_q8": compatibility, "compatibility_window_seconds": 5, "place": "NURSERY"}
+    ledger.data["operations"][event_id] = {"operation_kind": "NURSERY_PAIR_ADMISSION",
+        "state": "SOCIALIZING", "morph_ids": list(ids), "created_at": _iso(now),
+        "compatibility_ready_at": _iso(now + timedelta(seconds=5)), "result": deepcopy(result)}
+    return result
+
+
+def enter_void_stasis(ledger: MorphTransferLedger, request: dict[str, Any], now: datetime) -> dict[str, Any]:
+    """Persist an exact pre-stasis digest and enter the governed 24-hour lock."""
+    _exact(request, {"schema", "event_id", "morph_id"}, "Void admission")
+    if request["schema"] != FOUNDATION_REFLEX_SCHEMA:
+        raise TransferError("INVALID_SCHEMA", "Void reflex schema is not admitted")
+    morph = ledger.data["morphs"].get(str(request["morph_id"]))
+    if not morph:
+        raise TransferError("NOT_FOUND", "Morph is not admitted")
+    _require_haos(morph)
+    event_id = str(request["event_id"])
+    existing = ledger.data["operations"].get(event_id)
+    if existing:
+        if existing.get("operation_kind") != "VOID_STASIS" or existing.get("morph_id") != morph["morph_id"]:
+            raise TransferError("REPLAY_CONFLICT", "Void stasis identity changed")
+        return deepcopy(existing["result"])
+    before = morph["snapshot_digest"]
+    status = place_morph(ledger, {"schema": HABITAT_SCHEMA, "event_id": f"{event_id}:place",
+        "morph_id": morph["morph_id"], "place": "VOID"}, now)
+    result = {"schema": FOUNDATION_REFLEX_SCHEMA, "reflex": "VOID_STASIS", "event_id": event_id,
+        "morph_id": morph["morph_id"], "pre_stasis_digest": before, "stasis_digest": status["snapshot_digest"],
+        "locked_until": status["void_locked_until"], "state": "STASIS", "place": "VOID"}
+    ledger.data["operations"][event_id] = {"operation_kind": "VOID_STASIS",
+        "state": "STASIS", "morph_id": morph["morph_id"], "created_at": _iso(now), "result": deepcopy(result)}
+    return result
+
+
+def withdraw_void_stasis(ledger: MorphTransferLedger, request: dict[str, Any], now: datetime) -> dict[str, Any]:
+    """Withdraw only the exact locked snapshot after the 24-hour gate."""
+    _exact(request, {"schema", "event_id", "morph_id", "stasis_id", "target_place"}, "Void withdrawal")
+    if request["schema"] != FOUNDATION_REFLEX_SCHEMA or request["target_place"] not in {"HORIZON", "CODE_HAVEN"}:
+        raise TransferError("INVALID_WITHDRAWAL", "Void may release only to Horizon or Code Haven")
+    event_id = str(request["event_id"])
+    existing = ledger.data["operations"].get(event_id)
+    if existing:
+        if existing.get("operation_kind") != "VOID_WITHDRAWAL" or existing.get("morph_id") != request["morph_id"]:
+            raise TransferError("REPLAY_CONFLICT", "Void withdrawal identity changed")
+        return deepcopy(existing["result"])
+    morph = ledger.data["morphs"].get(str(request["morph_id"]))
+    operation = ledger.data["operations"].get(str(request["stasis_id"]))
+    if not morph or not operation or operation.get("operation_kind") != "VOID_STASIS" or operation.get("morph_id") != request["morph_id"]:
+        raise TransferError("STASIS_RECEIPT_REQUIRED", "matching Void stasis receipt is required")
+    if morph["snapshot_digest"] != operation["result"]["stasis_digest"]:
+        raise TransferError("STASIS_DIGEST_DRIFT", "Void snapshot changed while time was stopped")
+    status = place_morph(ledger, {"schema": HABITAT_SCHEMA, "event_id": f"{event_id}:place",
+        "morph_id": morph["morph_id"], "place": request["target_place"]}, now)
+    operation["state"] = "WITHDRAWN"
+    operation["withdrawal_id"] = event_id
+    admission_id = None
+    if request["target_place"] == "CODE_HAVEN":
+        admission_id = f"{event_id}:haven"
+        admission_result = {"schema": FOUNDATION_REFLEX_SCHEMA, "reflex": "CODE_HAVEN_ADMIT",
+            "event_id": admission_id, "morph_id": morph["morph_id"], "prior_place": "VOID",
+            "prior_snapshot_digest": operation["result"]["stasis_digest"],
+            "snapshot_digest": status["snapshot_digest"], "reason": "VOID_WITHDRAWAL",
+            "state": "ADMITTED", "place": "CODE_HAVEN"}
+        ledger.data["operations"][admission_id] = {"operation_kind": "CODE_HAVEN_ADMISSION",
+            "state": "ADMITTED", "morph_id": morph["morph_id"], "created_at": _iso(now),
+            "result": deepcopy(admission_result)}
+    result = {"schema": FOUNDATION_REFLEX_SCHEMA, "reflex": "VOID_WITHDRAW", "event_id": event_id,
+        "stasis_id": request["stasis_id"], "morph_id": morph["morph_id"], "state": "WITHDRAWN",
+        "place": status["place"], "snapshot_digest": status["snapshot_digest"],
+        "code_haven_admission_id": admission_id}
+    ledger.data["operations"][event_id] = {"operation_kind": "VOID_WITHDRAWAL", "state": "COMMITTED",
+        "morph_id": morph["morph_id"], "created_at": _iso(now), "result": deepcopy(result)}
+    return result
 
 
 def _apply_life_gain(morph: dict[str, Any], action: str, steps: int) -> tuple[int, int, dict[str, Any]]:
