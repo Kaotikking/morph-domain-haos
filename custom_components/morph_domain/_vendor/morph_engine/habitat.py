@@ -789,6 +789,31 @@ def habitat_status(ledger: MorphTransferLedger, morph_id: str, now: datetime) ->
         raise TransferError("NOT_FOUND", "Morph is not known to HAOS")
     habitat = _habitat(morph, now)
     alias = next((name for name, frame in FRAME_ALIASES.items() if frame == morph["source_frame"]), morph["source_frame"])
+    public_presentation = deepcopy(habitat["presentation"])
+    name_record = morph.get("presentation")
+    display_name = name_record.get("display_name") if isinstance(name_record, dict) else None
+    if not isinstance(display_name, str) or not display_name.strip():
+        # Older hatch generations durably retained the generated name in the
+        # hatch receipt but exposed only the neutral visual presentation.  A
+        # read may recover that public label without rewriting Morph life.
+        display_name = next((
+            operation.get("result", {}).get("display_name")
+            for operation in ledger.data["operations"].values()
+            if operation.get("operation_kind") == "GEN1_STARTER_HATCH"
+            and operation.get("morph_id") == morph["morph_id"]
+            and isinstance(operation.get("result", {}).get("display_name"), str)
+        ), None)
+    if isinstance(display_name, str) and display_name.strip():
+        public_presentation["display_name"] = display_name.strip()
+    committed_inbound = any(
+        operation.get("morph_id") == morph["morph_id"]
+        and operation.get("state") == "ACTIVE_HAOS"
+        and operation.get("generation") == morph["generation"]
+        for operation in ledger.data["operations"].values()
+    )
+    source_frame = str(morph["source_frame"])
+    dedicated_frame = bool(source_frame and source_frame.lower() != "unknown"
+                           and not source_frame.lower().startswith("haos-"))
     result = {
         "schema": HABITAT_SCHEMA,
         "morph_id": morph["morph_id"],
@@ -806,7 +831,14 @@ def habitat_status(ledger: MorphTransferLedger, morph_id: str, now: datetime) ->
         "void_locked_until": habitat["void_locked_until"],
         "nursery_elapsed_seconds": habitat["nursery_elapsed_seconds"],
         "environment": deepcopy(habitat["environment"]),
-        "presentation": deepcopy(habitat["presentation"]),
+        "presentation": public_presentation,
+        "frame_return": {
+            "dedicated": dedicated_frame,
+            "target_frame": source_frame if dedicated_frame else None,
+            "call_available": bool(dedicated_frame and committed_inbound
+                                   and morph["authority"] == "HAOS"
+                                   and habitat["place"] == "HORIZON"),
+        },
         "founder_axes": deepcopy(habitat["founder_axes"]),
         "social": deepcopy(habitat["social"]),
         "games": [public_state(session) for session in habitat["games"]["sessions"].values()],

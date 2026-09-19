@@ -171,6 +171,13 @@ def test_android_call_requires_committed_haos_horizon_morph():
     assert receipt["transfer_required"] is True
     assert habitat.call_morph(ledger, request, now) == receipt
 
+    status = habitat.habitat_status(ledger, "pulse", now)
+    assert status["frame_return"] == {
+        "dedicated": True,
+        "target_frame": request["target_frame"],
+        "call_available": True,
+    }
+
     changed = dict(request)
     changed["target_frame"] = "android-morph-habitat:other"
     try:
@@ -179,6 +186,26 @@ def test_android_call_requires_committed_haos_horizon_morph():
         assert err.code == "WRONG_FRAME_ALIAS"
     else:
         raise AssertionError("changed call replay was accepted")
+
+
+def test_hatched_starter_name_is_exposed_without_replacing_immutable_id():
+    now = datetime(2026, 9, 12, tzinfo=UTC)
+    ledger = hosted(now)
+    morph = ledger.data["morphs"]["pulse"]
+    morph["morph_id"] = "starter-water"
+    morph["founder_id"] = "L1-04"
+    morph["presentation"] = {
+        "display_name": "Marea", "name_source": "POOL_A",
+        "name_version": "gen1-word-pools-v1", "named_at": now.isoformat(),
+    }
+    ledger.data["morphs"]["starter-water"] = ledger.data["morphs"].pop("pulse")
+    for operation in ledger.data["operations"].values():
+        if operation.get("morph_id") == "pulse":
+            operation["morph_id"] = "starter-water"
+    status = habitat.habitat_status(ledger, "starter-water", now)
+    assert status["morph_id"] == "starter-water"
+    assert status["founder_id"] == "L1-04"
+    assert status["presentation"]["display_name"] == "Marea"
 
 
 def test_nursery_graduates_once_after_72_hours_and_preserves_identity():

@@ -85,9 +85,12 @@ panel.render();
 assert.equal((panel.shadowRoot.innerHTML.match(/data-game-pattern=/g) || []).length, 4);
 panel.place = "HORIZON";
 panel.rows[0].place = "HORIZON";
+panel.rows[0].frame_return = { dedicated: true, target_frame: "android-frame:v1:pulse", call_available: true };
 panel.rows[0].social = { last_activity: { kind: "REST", expression: "SWIM" } };
 panel.render();
 assert.doesNotMatch(panel.shadowRoot.innerHTML, /data-game-tile=/);
+assert.match(panel.shadowRoot.innerHTML, /data-call-frame/);
+assert.match(panel.shadowRoot.innerHTML, /Send to frame/);
 assert.match(panel.shadowRoot.innerHTML, /swimming/);
 panel.rows[0].social.last_activity.expression = "AIR_CURRENTS";
 assert.equal(panel.status(panel.rows[0]), "riding air currents");
@@ -121,6 +124,13 @@ panel.refresh().then(async () => {
   assert.equal(calls[0].route, "morph-domain/v1/habitat/care");
   assert.equal(calls[0].body.action, "FEED");
   calls.length = 0;
+  panel.rows[0].place = "HORIZON";
+  panel.rows[0].frame_return = { dedicated: true, target_frame: "android-frame:v1:pulse", call_available: true };
+  await panel.callFrame("pulse");
+  assert.equal(calls[0].route, "morph-domain/v1/habitat/call");
+  assert.equal(calls[0].body.target_frame, "android-frame:v1:pulse");
+  assert.equal(calls[0].body.morph_id, "pulse");
+  calls.length = 0;
   await panel.actOnMorph("move", "NURSERY");
   assert.equal(calls[0].route, "morph-domain/v1/habitat/place");
   assert.equal(calls[0].body.place, "NURSERY");
@@ -129,3 +139,4 @@ panel.refresh().then(async () => {
   assert.equal(calls.length, 0, "Void requires a second tap");
   console.log("Gardens panel smoke PASS");
 }).catch(error => { console.error(error.message); process.exitCode = 1; });
+
