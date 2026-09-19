@@ -193,19 +193,21 @@ async def async_setup_morph_habitat(hass: HomeAssistant) -> None:
 
     hass.services.async_register(
         "morph_domain", "morph_place", handle_place,
-        schema={"morph_id": str, "place": vol.In(sorted(PLACES))},
+        schema=vol.Schema({vol.Required("morph_id"): str,
+                           vol.Required("place"): vol.In(sorted(PLACES))}),
     )
     hass.services.async_register(
         "morph_domain", "morph_care", handle_care,
-        schema={"morph_id": str, "action": vol.In(sorted(CARE_ACTIONS))},
+        schema=vol.Schema({vol.Required("morph_id"): str,
+                           vol.Required("action"): vol.In(sorted(CARE_ACTIONS))}),
     )
     hass.services.async_register(
         "morph_domain", "return_to_birth_frame", handle_return_to_birth_frame,
-        schema={"morph_id": str},
+        schema=vol.Schema({vol.Required("morph_id"): str}),
     )
     hass.services.async_register(
         "morph_domain", "recall_to_horizon", handle_recall_to_horizon,
-        schema={"morph_id": str},
+        schema=vol.Schema({vol.Required("morph_id"): str}),
     )
     runtime = {
         "cancel": None,
