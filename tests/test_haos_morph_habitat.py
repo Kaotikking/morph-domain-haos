@@ -188,6 +188,35 @@ def test_android_call_requires_committed_haos_horizon_morph():
         raise AssertionError("changed call replay was accepted")
 
 
+def test_code_haven_correction_preserves_but_excludes_false_call():
+    now = datetime(2026, 9, 19, tzinfo=UTC)
+    ledger = hosted(now)
+    morph = ledger.data["morphs"]["pulse"]
+    habitat.call_morph(ledger, {
+        "schema": habitat.HABITAT_SCHEMA, "call_id": "false-call",
+        "morph_id": "pulse", "target_frame": morph["source_frame"],
+    }, now)
+    habitat.place_morph(ledger, {
+        "schema": habitat.HABITAT_SCHEMA, "event_id": "to-haven",
+        "morph_id": "pulse", "place": "CODE_HAVEN",
+    }, now)
+    result = habitat.correct_habitat_event(ledger, {
+        "schema": habitat.HABITAT_SCHEMA, "event_id": "repair-false-call",
+        "morph_id": "pulse", "invalid_event_id": "false-call",
+        "reason": "PROVIDER_EXECUTION_ERROR",
+    }, now)
+    assert result["authority"] == "HAOS"
+    assert result["place"] == "CODE_HAVEN"
+    assert result["invalidated_event_ids"] == ["false-call"]
+    assert morph["habitat"]["history"][-1]["type"] == "CODE_HAVEN_CORRECTION"
+    assert morph["habitat"]["history"][-1]["reducer_effect"] == "EXCLUDED"
+    assert habitat.correct_habitat_event(ledger, {
+        "schema": habitat.HABITAT_SCHEMA, "event_id": "repair-false-call",
+        "morph_id": "pulse", "invalid_event_id": "false-call",
+        "reason": "PROVIDER_EXECUTION_ERROR",
+    }, now)["invalidated_event_ids"] == ["false-call"]
+
+
 def test_hatched_starter_name_is_exposed_without_replacing_immutable_id():
     now = datetime(2026, 9, 12, tzinfo=UTC)
     ledger = hosted(now)
