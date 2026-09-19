@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from copy import deepcopy
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 import json
 import uuid
 from time import perf_counter
@@ -137,7 +137,6 @@ class MorphTransferManager:
             habitat_history,
             habitat_list,
             habitat_status,
-            call_morph,
             place_morph,
             read_environment,
             update_presentation,
@@ -201,8 +200,17 @@ class MorphTransferManager:
                 # The one existing private Store must durably retain committed
                 # and rejected tickets before either is acknowledged.
                 changed = candidate.data != self.ledger.data
+            elif action == "return-frame":
+                # The complete frame return is an async, multi-boundary reflex;
+                # it owns its lock and durable checkpoints below.
+                raise TransferError("INTERNAL_ROUTE", "return-frame must use the transaction reflex")
             elif action == "call":
-                result = call_morph(candidate, body, now)
+                # Retained only so old clients fail truthfully. A call receipt is
+                # not a custody transfer and must never be exposed as one again.
+                raise TransferError("CALL_ONLY_DISABLED", "use the complete return-frame reflex")
+            elif action == "correct-event":
+                from .morph_habitat import correct_habitat_event
+                result = correct_habitat_event(candidate, body, now)
                 changed = True
             elif action == "presentation":
                 result = update_presentation(candidate, body, now)
@@ -228,6 +236,155 @@ class MorphTransferManager:
             self.metrics.record_storage_decision(performed=changed)
             self.metrics.record_api(started, read=action_is_read("habitat", action))
             return result
+
+    async def return_to_frame(self, body: dict[str, Any]) -> dict[str, Any]:
+        """Run the destination-owned ESPHome return protocol as one resumable reflex."""
+        _exact(body, {"schema", "morph_id", "target_frame"}, "frame return request")
+        if body["schema"] != "serein.morph-habitat.v1":
+            raise TransferError("INVALID_SCHEMA", "frame return schema is not admitted")
+        morph_id = str(body["morph_id"])
+        target_frame = str(body["target_frame"])
+        contracts = {
+            "esp32-frame:v1:pet-frame-sentinel": {
+                "request_service": "pet_frame_v12_morph_transfer_request_return",
+                "import_service": "pet_frame_v12_morph_transfer_import_return",
+                "resume_service": "pet_frame_v12_morph_transfer_resume",
+                "state_entity": "sensor.pet_frame_v12_6_0_earth_form_sentinel_sentinel_morph_transfer_state",
+                "request_entity": "sensor.pet_frame_v12_6_1_wifi_recovery_sentinel_sentinel_morph_return_request",
+            },
+        }
+        contract = contracts.get(target_frame)
+        if contract is None:
+            raise TransferError("FRAME_REFLEX_UNPROVEN", "this frame has no admitted full-return contract")
+
+        async with self.lock:
+            now = datetime.now(UTC)
+            candidate = MorphTransferLedger(deepcopy(self.ledger.data))
+            candidate.reconcile_expired(now)
+            morph = candidate.data["morphs"].get(morph_id)
+            if morph is None:
+                raise TransferError("NOT_FOUND", "Morph is not admitted")
+            if morph.get("source_frame") != target_frame:
+                raise TransferError("WRONG_LINEAGE", "return target is not the retained birth frame")
+            habitat = morph.get("habitat") or {}
+            if morph.get("authority") == "HAOS" and habitat.get("place") != "HORIZON":
+                raise TransferError("RETURN_REQUIRES_HORIZON", "only a HAOS-owned Morph in Horizon may return")
+
+            state = self.hass.states.get(contract["state_entity"])
+            if state is None or state.state in {"unknown", "unavailable"}:
+                raise TransferError("FRAME_UNAVAILABLE", "the destination frame state is unavailable")
+            frame_state = str(state.state)
+            if frame_state.startswith("FROZEN_FOR_HAOS"):
+                if morph.get("authority") != "HAOS":
+                    raise TransferError("AUTHORITY_CONFLICT", "frame and HAOS authority states disagree")
+                # The destination creates and durably saves the return ID before
+                # HAOS freezes its own authority. No HAOS-generated substitute exists.
+                await self.hass.services.async_call(
+                    "esphome", contract["request_service"], {}, blocking=True,
+                )
+                frame_state = await self._wait_frame_state(
+                    contract["state_entity"], "RETURN_REQUESTED", timeout=12,
+                )
+            if not frame_state.startswith(("RETURN_REQUESTED", "IMPORTED_INACTIVE", "FRAME_ACTIVE")):
+                raise TransferError("FRAME_NOT_READY", "destination frame has no resumable return state")
+            return_id = await self._wait_frame_value(
+                contract["state_entity"], frame_state.split("|", 1)[0],
+                contract["request_entity"], timeout=12,
+            )
+            if not return_id:
+                raise TransferError("DESTINATION_ID_NOT_DURABLE", "frame did not publish its saved return id")
+
+            operation = candidate.data.get("operations", {}).get(return_id)
+            if operation is None:
+                if morph.get("authority") != "HAOS":
+                    raise TransferError("RETURN_JOURNAL_MISSING", "destination request has no HAOS recovery journal")
+                expires_at = (datetime.now(UTC) + timedelta(minutes=5)).isoformat()
+                prepared = candidate.prepare_return({
+                    "schema": API_SCHEMA,
+                    "return_id": return_id,
+                    "morph_id": morph_id,
+                    "target_frame": target_frame,
+                    "expires_at": expires_at,
+                }, datetime.now(UTC))
+                await self.store.async_save(candidate.data)
+                self.ledger = candidate
+            else:
+                prepared = candidate.status(return_id, include_snapshot=True)
+                if prepared.get("morph_id") != morph_id or operation.get("target_frame") != target_frame:
+                    raise TransferError("RETURN_JOURNAL_CONFLICT", "saved return journal targets another Morph or frame")
+
+            # Portable-life fields remain at the payload root even when the
+            # nine-core Morph snapshot is embedded alongside them.
+            life = prepared["snapshot"]["payload"]
+            service_data = {
+                "return_id": return_id,
+                "snapshot_digest": prepared["snapshot_digest"],
+                "generation": prepared["generation"],
+                **{key: life[key] for key in (
+                    "saved_epoch_seconds", "behavior", "arousal_q8", "security_q8",
+                    "curiosity_q8", "social_q8", "fatigue_q8", "food_q8", "water_q8",
+                    "play_q8", "rest_q8", "attention_q8",
+                )},
+            }
+            if frame_state.startswith("RETURN_REQUESTED"):
+                await self.hass.services.async_call(
+                    "esphome", contract["import_service"], service_data, blocking=True,
+                )
+                frame_state = await self._wait_frame_state(
+                    contract["state_entity"], "IMPORTED_INACTIVE", timeout=12,
+                )
+
+            if operation is None or operation.get("state") == "RETURN_PREPARED":
+                committed = candidate.commit_return(return_id, prepared["snapshot_digest"], datetime.now(UTC))
+                await self.store.async_save(candidate.data)
+                self.ledger = candidate
+            else:
+                committed = candidate.status(return_id)
+            if not frame_state.startswith("FRAME_ACTIVE"):
+                await self.hass.services.async_call(
+                    "esphome", contract["resume_service"],
+                    {"return_id": return_id, "snapshot_digest": prepared["snapshot_digest"]},
+                    blocking=True,
+                )
+                frame_state = await self._wait_frame_state(
+                    contract["state_entity"], "FRAME_ACTIVE", timeout=12,
+                )
+            return {
+                "schema": "serein.morph-frame-return-result.v1",
+                "return_id": return_id,
+                "morph_id": morph_id,
+                "target_frame": target_frame,
+                "snapshot_digest": prepared["snapshot_digest"],
+                "generation": prepared["generation"],
+                "custody_committed": committed["authority"] == target_frame,
+                "destination_state_durable": True,
+                "destination_render_verified": False,
+                "frame_state": frame_state,
+                "operation_state": committed["operation_state"],
+            }
+
+    async def _wait_frame_state(self, entity_id: str, prefix: str, timeout: int) -> str:
+        deadline = asyncio.get_running_loop().time() + timeout
+        while asyncio.get_running_loop().time() < deadline:
+            state = self.hass.states.get(entity_id)
+            value = "" if state is None else str(state.state)
+            if value.startswith(prefix):
+                return value
+            await asyncio.sleep(0.25)
+        raise TransferError("FRAME_ACK_TIMEOUT", f"frame did not acknowledge {prefix}")
+
+    async def _wait_frame_value(self, state_entity: str, state_prefix: str,
+                                value_entity: str, timeout: int) -> str:
+        deadline = asyncio.get_running_loop().time() + timeout
+        while asyncio.get_running_loop().time() < deadline:
+            state = self.hass.states.get(state_entity)
+            value = self.hass.states.get(value_entity)
+            state_text = "" if state is None else str(state.state)
+            value_text = "" if value is None else str(value.state)
+            if state_text.startswith(state_prefix) and value_text not in {"", "unknown", "unavailable"}:
+                return value_text
+            await asyncio.sleep(0.25)
+        raise TransferError("FRAME_ACK_TIMEOUT", "frame did not publish its return request")
 
     async def tick_habitats(self) -> None:
         """Persist one bounded interval for every HAOS-owned active Morph."""
@@ -296,3 +453,4 @@ async def async_setup_morph_transfer(hass: HomeAssistant) -> None:
     hass.data[DATA_KEY] = manager
     hass.http.register_view(MorphTransferView)
     hass.http.register_view(MorphTransferStatusView)
+
