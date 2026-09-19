@@ -26,6 +26,7 @@ LEGACY_STORE_KEY = "serein_gateway.morph_transfer"
 
 FRAME_CONTRACTS = {
     "esp32-frame:v1:pet-frame-sentinel": {
+        "window_service": "pet_frame_v12_morph_window_update",
         "request_service": "pet_frame_v12_morph_transfer_request_return",
         "import_service": "pet_frame_v12_morph_transfer_import_return",
         "resume_service": "pet_frame_v12_morph_transfer_resume",
@@ -583,9 +584,17 @@ class MorphTransferManager:
         from .migration import legacy_engine_enabled
         if legacy_engine_enabled(self.hass):
             return
-        from .morph_habitat import advance_morph, read_environment, run_automatic_reflexes, run_social_reflexes
+        from .morph_habitat import (
+            advance_morph,
+            habitat_status,
+            read_environment,
+            run_automatic_reflexes,
+            run_social_reflexes,
+        )
+        from ._vendor.morph_engine.morph_window import build_morph_window
 
         started = perf_counter()
+        frame_windows: list[tuple[str, dict[str, Any]]] = []
         async with self.lock:
             now = datetime.now(UTC)
             candidate = MorphTransferLedger(deepcopy(self.ledger.data))
@@ -606,6 +615,33 @@ class MorphTransferManager:
             if changed:
                 await self.store.async_save(candidate.data)
                 self.ledger = candidate
+            # Build only reduced, read-only Window packets while the exact
+            # ledger generation is locked.  Delivery happens after release so
+            # a sleeping/offline Frame can never stall Morph life.
+            for morph_id, morph in candidate.data["morphs"].items():
+                contract = FRAME_CONTRACTS.get(str(morph.get("source_frame")))
+                if not contract or not contract.get("window_service"):
+                    continue
+                status = habitat_status(candidate, morph_id, now)
+                window = build_morph_window(status, candidate.data["operations"], now)
+                frame_windows.append((str(contract["window_service"]), {
+                    "schema": window["schema"],
+                    "morph_id": window["morph_id"],
+                    "display_name": window["display_name"],
+                    "window_state": window["state"],
+                    "authority": window["authority"],
+                    "place": window["place"],
+                    "custody_revision": int(window["custody_revision"]),
+                    "lineage_generation": int(window.get("lineage_generation") or 0),
+                    "snapshot_digest": window["snapshot_digest"],
+                    "scene_kind": window["scene"]["kind"],
+                    "scene_expression": window["scene"]["expression"],
+                    "palette_primary": window["avatar"]["palette"][1],
+                    "palette_accent": window["avatar"]["palette"][2],
+                    "avatar_rows": "/".join(window["avatar"]["rows"]),
+                    "avatar_digest": window["avatar"]["avatar_digest"],
+                    "window_digest": window["window_digest"],
+                }))
             self.metrics.record_storage_decision(performed=changed)
             self.metrics.record_tick(started, evaluated=evaluated, advanced=advanced)
             for notice in notices:
@@ -615,6 +651,17 @@ class MorphTransferManager:
                     {"notification_id": notice["id"], "title": title, "message": message},
                     blocking=False,
                 )
+        for service, payload in frame_windows:
+            if not self.hass.services.has_service("esphome", service):
+                continue
+            try:
+                await self.hass.services.async_call(
+                    "esphome", service, payload, blocking=False,
+                )
+            except Exception:
+                # Presentation delivery is deliberately below custody/life.
+                # The next scheduler interval retries without changing truth.
+                continue
 
 
 async def async_setup_morph_transfer(hass: HomeAssistant) -> None:
