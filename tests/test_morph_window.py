@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 MODULE = Path(__file__).parents[1] / "custom_components/morph_domain/_vendor/morph_engine/morph_window.py"
+TRANSFER_ADAPTER = Path(__file__).parents[1] / "custom_components/morph_domain/morph_transfer.py"
 spec = importlib.util.spec_from_file_location("morph_window_test", MODULE)
 window = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(window)
@@ -72,4 +73,15 @@ def test_pixel_identity_changes_with_presentation_revision_not_custody():
     local["authority"] = local["source_frame"]
     assert window.build_morph_window(first, {}, NOW)["avatar"] == window.build_morph_window(local, {}, NOW)["avatar"]
     assert window.build_morph_window(first, {}, NOW)["avatar"] != window.build_morph_window(changed, {}, NOW)["avatar"]
+
+
+def test_haos_push_adapter_uses_existing_encrypted_esphome_service_boundary():
+    """The Window transport must extend the proven frame contract, not add auth."""
+    source = TRANSFER_ADAPTER.read_text(encoding="utf-8")
+    assert '"window_service": "pet_frame_v12_morph_window_update"' in source
+    assert 'self.hass.services.has_service("esphome", service)' in source
+    assert 'await self.hass.services.async_call(' in source
+    assert '"avatar_rows": "/".join(window["avatar"]["rows"])' in source
+    assert '"window_digest": window["window_digest"]' in source
+    assert "Authorization" not in source
 
