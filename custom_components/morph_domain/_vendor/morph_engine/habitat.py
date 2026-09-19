@@ -26,6 +26,7 @@ from ..morph_sdk.dna_v1 import SOCIAL_SCHEMA, SOCIAL_STATES
 from ..morph_sdk.ump_world import decide_pair, choose_horizon_activity
 from .garden_games import GardenGameError, start_game, move as game_move, public_state
 from .world_objects import (HORIZON_ACTIVITY_OBJECTS, OBJECTS, WorldObjectError, affinity_from_nine_core,
+                            compact_history,
                             elemental_rest_scene,
                             interact as object_interact, new_history)
 from ..morph_sdk.presentation import (
@@ -321,6 +322,11 @@ def advance_morph(morph: dict[str, Any], now: datetime, environment: dict[str, A
         habitat["last_tick_at"] = _iso(now)
         return created
     payload = morph["snapshot"]["payload"]
+    core = payload.get("morph_core")
+    if isinstance(core, dict) and core.get("schema") == MORPH_NINE_CORE_SCHEMA:
+        world_history = core.get("knowledge", {}).get("learned", {}).get("world_objects")
+        if isinstance(world_history, dict):
+            compact_history(world_history)
     saved = int(payload["saved_epoch_seconds"])
     current = int(now.timestamp())
     elapsed = min(240, max(0, current - saved))

@@ -230,6 +230,30 @@ def test_place_is_idempotent_and_enters_portable_nine_core_chronicle_once():
     assert morph["snapshot_digest"] == digest
 
 
+def test_tick_compacts_oversized_world_replay_detail_before_snapshot_refresh():
+    now = datetime(2026, 9, 19, tzinfo=UTC)
+    ledger, _ = aligned_in_code_haven(now)
+    morph = ledger.data["morphs"]["pulse"]
+    habitat.habitat_status(ledger, "pulse", now)
+    morph["habitat"]["place"] = "HORIZON"
+    learned = morph["snapshot"]["payload"]["morph_core"]["knowledge"]["learned"]
+    learned["world_objects"] = {
+        "morph_id": "pulse",
+        "counts": {"spring-pool": 400},
+        "preferences": ["spring-pool"],
+        "events": {f"world-{index}": {"event_id": f"world-{index}", "place": "HORIZON",
+                    "object_id": "spring-pool", "participants": ["pulse"]}
+                   for index in range(400)},
+    }
+    morph["snapshot"]["payload"]["saved_epoch_seconds"] = int(now.timestamp()) - 60
+
+    assert habitat.advance_morph(morph, now, None)
+    history = morph["snapshot"]["payload"]["morph_core"]["knowledge"]["learned"]["world_objects"]
+    assert len(history["events"]) == 128
+    assert history["counts"] == {"spring-pool": 400}
+    assert history["preferences"] == ["spring-pool"]
+
+
 def test_horizon_water_comes_from_spring_pool_not_timed_care_script():
     now = datetime(2026, 9, 8, 8, tzinfo=UTC)
     ledger = hosted_v3(now)

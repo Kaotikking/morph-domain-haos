@@ -16,6 +16,7 @@ OBJECTS = {
     "SEREIN_GARDENS": ("play-orb", "shared-chimes", "quiet-pool", "pattern-tiles"),
 }
 PREFERENCE_THRESHOLD = 3
+WORLD_EVENT_CAPACITY = 128
 OBJECT_ELEMENTS = {
     "nourishment-grove": "EARTH", "spring-pool": "WATER",
     "rest-nook": "EARTH", "gathering-stone": "EARTH",
@@ -53,6 +54,19 @@ def new_history(morph_id: str) -> dict[str, Any]:
     if not isinstance(morph_id, str) or not morph_id:
         raise WorldObjectError("Morph identity required")
     return {"morph_id": morph_id, "events": {}, "counts": {}, "preferences": []}
+
+
+def compact_history(history: dict[str, Any]) -> bool:
+    """Reduce replay detail while retaining lifetime counts and preferences."""
+    events = history.get("events")
+    if not isinstance(events, dict):
+        raise WorldObjectError("invalid history events")
+    overflow = len(events) - WORLD_EVENT_CAPACITY
+    if overflow <= 0:
+        return False
+    for event_id in list(events)[:overflow]:
+        del events[event_id]
+    return True
 
 
 def affinity_from_nine_core(core: dict[str, Any], place: str) -> dict[str, int]:
@@ -134,7 +148,9 @@ def interact(histories: dict[str, dict[str, Any]], *, event_id: str, place: str,
     for identity in morph_ids:
         history = histories[identity]
         history["events"][event_id] = deepcopy(event)
+        compact_history(history)
         history["counts"][object_id] = history["counts"].get(object_id, 0) + 1
         if history["counts"][object_id] >= PREFERENCE_THRESHOLD and object_id not in history["preferences"]:
             history["preferences"].append(object_id)
     return {"event_id": event_id, "result": "ACCEPTED", "credited": morph_ids}
+

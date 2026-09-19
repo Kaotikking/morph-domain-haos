@@ -20,6 +20,19 @@ def population():
     return {morph_id: new_history(morph_id) for morph_id in MORPHS}
 
 
+def test_world_event_detail_is_bounded_but_lifetime_counts_survive():
+    rows = {"pulse": new_history("pulse")}
+    for index in range(world.WORLD_EVENT_CAPACITY + 7):
+        interact(rows, event_id=f"event-{index}", place="HORIZON",
+                 object_id="spring-pool", participants=("pulse",),
+                 willing={"pulse": True})
+    assert len(rows["pulse"]["events"]) == world.WORLD_EVENT_CAPACITY
+    assert "event-0" not in rows["pulse"]["events"]
+    assert f"event-{world.WORLD_EVENT_CAPACITY + 6}" in rows["pulse"]["events"]
+    assert rows["pulse"]["counts"]["spring-pool"] == world.WORLD_EVENT_CAPACITY + 7
+    assert "spring-pool" in rows["pulse"]["preferences"]
+
+
 def affinity(place, favored):
     return {item: 5 if item == favored else 1 for item in OBJECTS[place]}
 
@@ -97,3 +110,4 @@ def test_no_affinity_source_is_not_a_fake_personality():
         choose_object("HORIZON", {"rest-nook": 5}, histories["pulse"])
     with pytest.raises(WorldObjectError, match="no willing object choice"):
         choose_object("HORIZON", {item: 0 for item in OBJECTS["HORIZON"]}, histories["pulse"])
+
