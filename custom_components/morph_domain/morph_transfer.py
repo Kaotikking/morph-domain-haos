@@ -24,6 +24,99 @@ from .runtime_metrics import MorphRuntimeMetrics
 STORE_KEY = "morph_domain.transfer"
 LEGACY_STORE_KEY = "serein_gateway.morph_transfer"
 
+FRAME_CONTRACTS = {
+    "esp32-frame:v1:pet-frame-sentinel": {
+        "request_service": "pet_frame_v12_morph_transfer_request_return",
+        "import_service": "pet_frame_v12_morph_transfer_import_return",
+        "resume_service": "pet_frame_v12_morph_transfer_resume",
+        "freeze_service": "pet_frame_v12_morph_transfer_freeze",
+        "state_entity": "sensor.pet_frame_v12_6_0_earth_form_sentinel_sentinel_morph_transfer_state",
+        "request_entity": "sensor.pet_frame_v12_6_1_wifi_recovery_sentinel_sentinel_morph_return_request",
+        "portable_core_entity": "sensor.pet_frame_v12_6_0_earth_form_sentinel_sentinel_morph_portable_core",
+        "engine_extension_entity": "sensor.pet_frame_v12_6_0_earth_form_sentinel_sentinel_morph_engine_extension",
+        "core_contract_entity": "sensor.pet_frame_v12_6_0_earth_form_sentinel_sentinel_morph_core_contract",
+    },
+}
+
+
+def _compact_state(text: str) -> dict[str, Any]:
+    if not isinstance(text, str) or not text.startswith("v1|"):
+        raise TransferError("FRAME_STATE_INVALID", "frame compact state is not admitted v1")
+    result: dict[str, Any] = {}
+    for part in text.split("|")[1:]:
+        if "=" not in part:
+            raise TransferError("FRAME_STATE_INVALID", "frame compact state is malformed")
+        key, value = part.split("=", 1)
+        result[key] = int(value) if value.isdigit() else value
+    return result
+
+
+def build_frame_recall_offer(morph: dict[str, Any], transfer_id: str,
+                             portable_text: str, extension_text: str,
+                             contract_text: str, now: datetime) -> dict[str, Any]:
+    """Build the exact next-generation offer from a frozen admitted frame."""
+    portable = _compact_state(portable_text)
+    extension = _compact_state(extension_text)
+    contract = _compact_state(contract_text)
+    required_portable = {"saved", "behavior", "arousal", "security", "curiosity", "social",
+                         "fatigue", "food", "water", "play", "rest", "attention"}
+    required_extension = {"birth", "feed_count", "water_count", "play_count", "rest_count",
+                          "development", "earth", "growth", "stage", "world", "seen", "encounters"}
+    if not required_portable <= portable.keys() or not required_extension <= extension.keys():
+        raise TransferError("FRAME_STATE_INCOMPLETE", "frame did not publish the complete portable life state")
+    snapshot = deepcopy(morph["snapshot"])
+    payload = snapshot["payload"]
+    for target, source in {
+        "saved_epoch_seconds": "saved", "behavior": "behavior", "arousal_q8": "arousal",
+        "security_q8": "security", "curiosity_q8": "curiosity", "social_q8": "social",
+        "fatigue_q8": "fatigue", "food_q8": "food", "water_q8": "water",
+        "play_q8": "play", "rest_q8": "rest", "attention_q8": "attention",
+    }.items():
+        payload[target] = portable[source]
+    ext_payload = payload["engine_extension"]["payload"]
+    ext_payload["birth_epoch"] = extension["birth"]
+    ext_payload["care_counts"] = {"feed": extension["feed_count"], "water": extension["water_count"],
+                                  "play": extension["play_count"], "rest": extension["rest_count"]}
+    ext_payload["development_q8"] = max(int(ext_payload.get("development_q8", 0)), extension["development"])
+    mastery = ext_payload.setdefault("elemental_mastery_q16", {})
+    mastery["EARTH"] = max(int(mastery.get("EARTH", 0)), extension["earth"])
+    ext_payload["growth_q16"] = max(int(ext_payload.get("growth_q16", 0)), extension["growth"])
+    ext_payload["expression_stage"] = max(int(ext_payload.get("expression_stage", 0)), extension["stage"])
+    ext_payload["world_location"] = extension["world"]
+    ext_payload["founder_seen_mask"] = extension["seen"]
+    ext_payload["founder_encounters"] = max(int(ext_payload.get("founder_encounters", 0)), extension["encounters"])
+    payload["engine_extension"]["sha256"] = sha256_json(ext_payload)
+    core = payload.get("morph_core")
+    if not isinstance(core, dict):
+        raise TransferError("MORPH_CORE_REQUIRED", "frame recall requires the retained nine-core Morph snapshot")
+    needs = {"attention": portable["attention"], "energy": 255-portable["fatigue"],
+             "food": portable["food"], "play": portable["play"],
+             "rest": portable["rest"], "water": portable["water"]}
+    if core.get("schema") == "serein.morph-nine-core.v1":
+        core["cloud"].update({"active_frame": "haos-horizon", "authority": "HAOS_ACTIVE",
+                              "place": "HORIZON", "needs_q8": needs})
+        core["personality"]["mood"] = str(portable["behavior"]).lower()
+        life = core["memory"]["life"]
+    else:
+        core["state"].update({"active_frame": "haos-horizon", "authority": "HAOS_ACTIVE",
+                              "place": "HORIZON", "mood": str(portable["behavior"]).lower(),
+                              "needs_q8": needs})
+        life = core["life"]
+    life["care_counts"] = deepcopy(ext_payload["care_counts"])
+    life["growth_q16"] = max(int(life.get("growth_q16", 0)), extension["growth"])
+    life.setdefault("elemental_mastery_q16", {})["earth"] = mastery["EARTH"]
+    life.setdefault("relationship_counts", {})["founder_encounters"] = ext_payload["founder_encounters"]
+    life["journey_count"] = max(int(life.get("journey_count", 0)), int(contract.get("journeys", 0)))
+    snapshot["sha256"] = sha256_json(payload)
+    created = now.astimezone(UTC)
+    return {"schema": API_SCHEMA, "transfer_id": transfer_id, "morph_id": morph["morph_id"],
+            "founder_id": morph["founder_id"], "device_birth_lineage": morph["device_birth_lineage"],
+            "source_frame": morph["source_frame"], "target_frame": "HAOS",
+            "generation": int(morph["generation"])+1, "predecessor_generation": int(morph["generation"]),
+            "created_at": created.isoformat(), "expires_at": (created+timedelta(minutes=5)).isoformat(),
+            "engine_version": morph["engine_version"], "genome": morph["genome"],
+            "genome_sha256": morph["genome_sha256"], "snapshot": snapshot}
+
 def reflex_notice_content(notice: dict[str, str]) -> tuple[str, str]:
     """Fail closed on unknown reflex kinds instead of sending a false diagnosis."""
     kind = notice["kind"]
@@ -244,16 +337,7 @@ class MorphTransferManager:
             raise TransferError("INVALID_SCHEMA", "frame return schema is not admitted")
         morph_id = str(body["morph_id"])
         target_frame = str(body["target_frame"])
-        contracts = {
-            "esp32-frame:v1:pet-frame-sentinel": {
-                "request_service": "pet_frame_v12_morph_transfer_request_return",
-                "import_service": "pet_frame_v12_morph_transfer_import_return",
-                "resume_service": "pet_frame_v12_morph_transfer_resume",
-                "state_entity": "sensor.pet_frame_v12_6_0_earth_form_sentinel_sentinel_morph_transfer_state",
-                "request_entity": "sensor.pet_frame_v12_6_1_wifi_recovery_sentinel_sentinel_morph_return_request",
-            },
-        }
-        contract = contracts.get(target_frame)
+        contract = FRAME_CONTRACTS.get(target_frame)
         if contract is None:
             raise TransferError("FRAME_REFLEX_UNPROVEN", "this frame has no admitted full-return contract")
 
@@ -362,6 +446,65 @@ class MorphTransferManager:
                 "frame_state": frame_state,
                 "operation_state": committed["operation_state"],
             }
+
+    async def recall_from_frame(self, body: dict[str, Any]) -> dict[str, Any]:
+        """Freeze an admitted birth frame and atomically reclaim its Morph into Horizon."""
+        _exact(body, {"schema", "morph_id", "source_frame"}, "frame recall request")
+        if body["schema"] != "serein.morph-habitat.v1":
+            raise TransferError("INVALID_SCHEMA", "frame recall schema is not admitted")
+        morph_id, source_frame = str(body["morph_id"]), str(body["source_frame"])
+        contract = FRAME_CONTRACTS.get(source_frame)
+        if contract is None:
+            raise TransferError("FRAME_REFLEX_UNPROVEN", "this frame has no admitted full-recall contract")
+        async with self.lock:
+            now = datetime.now(UTC)
+            candidate = MorphTransferLedger(deepcopy(self.ledger.data))
+            candidate.reconcile_expired(now)
+            morph = candidate.data["morphs"].get(morph_id)
+            if morph is None:
+                raise TransferError("NOT_FOUND", "Morph is not admitted")
+            if morph.get("source_frame") != source_frame:
+                raise TransferError("WRONG_LINEAGE", "recall source is not the retained birth frame")
+            if morph.get("authority") != source_frame:
+                raise TransferError("AUTHORITY_CONFLICT", "birth frame does not own the current generation")
+            state = self.hass.states.get(contract["state_entity"])
+            state_text = "" if state is None else str(state.state)
+            expected = f"FRAME_ACTIVE|generation={morph['generation']}|frozen=no"
+            if state_text != expected:
+                raise TransferError("FRAME_NOT_READY", "frame generation or authority does not match HAOS")
+            transfer_id = f"sentinel-{int(morph['generation']) + 1}-{uuid.uuid4().hex}"
+            await self.hass.services.async_call("esphome", contract["freeze_service"],
+                                                {"transfer_id": transfer_id}, blocking=True)
+            frozen = await self._wait_frame_state(contract["state_entity"], "FROZEN_FOR_HAOS", timeout=12)
+            if f"generation={morph['generation']}" not in frozen:
+                raise TransferError("GENERATION_CONFLICT", "frame froze a different generation")
+            values: dict[str, str] = {}
+            for key in ("portable_core_entity", "engine_extension_entity", "core_contract_entity"):
+                entity = self.hass.states.get(contract[key])
+                value = "" if entity is None else str(entity.state)
+                if value in {"", "unknown", "unavailable"}:
+                    raise TransferError("FRAME_STATE_INCOMPLETE", "frozen frame state is unavailable")
+                values[key] = value
+            offer = build_frame_recall_offer(morph, transfer_id, values["portable_core_entity"],
+                                             values["engine_extension_entity"],
+                                             values["core_contract_entity"], datetime.now(UTC))
+            prepared = candidate.prepare_inbound(offer, datetime.now(UTC))
+            await self.store.async_save(candidate.data)
+            self.ledger = candidate
+            active = candidate.commit_inbound(transfer_id, prepared["snapshot_digest"], datetime.now(UTC))
+            from ._vendor.morph_engine.habitat import place_morph
+            placed = place_morph(candidate, {"schema": "serein.morph-habitat.v1",
+                                             "event_id": f"horizon-{transfer_id}",
+                                             "morph_id": morph_id, "place": "HORIZON"}, datetime.now(UTC))
+            await self.store.async_save(candidate.data)
+            self.ledger = candidate
+            return {"schema": "serein.morph-frame-recall-result.v1", "transfer_id": transfer_id,
+                    "morph_id": morph_id, "source_frame": source_frame,
+                    "snapshot_digest": active["snapshot_digest"], "generation": active["generation"],
+                    "custody_committed": active["authority"] == "HAOS",
+                    "source_state_durable": frozen.startswith("FROZEN_FOR_HAOS"),
+                    "destination_state_durable": True, "destination_render_verified": False,
+                    "place": placed["place"], "operation_state": active["operation_state"]}
 
     async def _wait_frame_state(self, entity_id: str, prefix: str, timeout: int) -> str:
         deadline = asyncio.get_running_loop().time() + timeout
