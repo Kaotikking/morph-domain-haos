@@ -111,7 +111,38 @@ def test_scheduler_awaits_tick_on_home_assistant_event_loop():
     assert "lambda _: hass.async_create_task" not in habitat
 def test_haos_services_register_callable_voluptuous_schemas():
     source = (COMPONENT / "morph_habitat.py").read_text()
-    assert source.count("schema=vol.Schema(") >= 4
+    assert source.count("schema=vol.Schema(") >= 10
     assert 'schema={"morph_id": str}' not in source
 
+
+def test_morph_window_is_packaged_as_an_authenticated_read_only_frame_contract():
+    policy = (COMPONENT / "http_policy.py").read_text(encoding="utf-8")
+    habitat = (COMPONENT / "morph_habitat.py").read_text(encoding="utf-8")
+    manager = (COMPONENT / "morph_transfer.py").read_text(encoding="utf-8")
+    contract = (COMPONENT / "_vendor/morph_engine/morph_window.py").read_text(encoding="utf-8")
+    assert '"window"' in policy
+    assert 'url = "/api/morph-domain/v1/window/{morph_id}"' in habitat
+    assert 'requires_auth = True' in habitat
+    assert 'action == "window"' in manager
+    assert 'WINDOW_SCHEMA = "serein.morph-window.v1"' in contract
+    assert '"DOMAIN_WINDOW"' in contract and '"LOCAL_PRESENCE"' in contract
+
+
+def test_prebattle_foundation_reflexes_are_named_and_battle_stays_blocked():
+    adapter = (COMPONENT / "morph_transfer.py").read_text()
+    habitat = (COMPONENT / "_vendor/morph_engine/habitat.py").read_text()
+    services = (COMPONENT / "services.yaml").read_text()
+    panel = (COMPONENT / "frontend/morph-domain-panel.js").read_text(encoding="utf-8")
+    for action in ("code-haven-admit", "code-haven-discharge", "nursery-pair-admit",
+                   "egg-hatch", "recover-transfers", "void-enter", "void-withdraw",
+                   "environment-interaction"):
+        assert f'action == "{action}"' in adapter
+    for service in ("code_haven_admit:", "code_haven_discharge:", "nursery_pair_admit:",
+                    "recover_transfers:", "void_enter:", "void_withdraw:"):
+        assert service in services
+    assert 'BATTLE_GATE' not in adapter
+    assert 'BLOCKED_UNTIL_REFLEXES_1_9_PROVEN' in habitat
+    assert 'morph-domain/v1/habitat/egg-hatch' in panel
+    assert 'route="void-enter"' in panel
+    assert 'route="code-haven-admit"' in panel
 

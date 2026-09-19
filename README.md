@@ -60,6 +60,10 @@ See [DNAv1 lineage and lifecycle](docs/DNA-V1-LIFECYCLE.md),
 [Morph World presentation foundation](docs/MORPH-WORLD-PRESENTATION-FOUNDATION-V1.md), and
 [Gen-1 package foundation](docs/GEN1-PACKAGE-FOUNDATION-V1.md).
 
+Dedicated frames use the authenticated [Morph Window v1](docs/MORPH-WINDOW-V1.md)
+contract to show a custody-bound pixel snapshot and current reduced scene while
+their Morph is living in HAOS. The frame remains a window, never a second owner.
+
 ## Install
 
 Copy `custom_components/morph_domain` into Home Assistant, restart, then add
@@ -72,6 +76,7 @@ Copy `custom_components/morph_domain` into Home Assistant, restart, then add
 - `GET /api/morph-domain/v1/transfer/status/{transfer_id}`
 - `GET /api/morph-domain/v1/habitat/status/{morph_id}`
 - `GET /api/morph-domain/v1/habitat/list` (read the roster before selecting a Morph ID)
+- `GET /api/morph-domain/v1/window/{morph_id}` (read-only dedicated-frame projection)
 
 The authenticated GET status routes are strictly observational: they do not
 advance life, reconcile expired transfers, or write Morph storage. Existing
@@ -82,6 +87,8 @@ state, which can change on the next engine tick; it never manufactures that
 change itself.
 
 Consumer-beta origin actions are `starter-status` (read-only) and `starter-create` (administrator-only). The dashboard presents the four public elemental choices only while a clean installation is eligible. Creation is a real durable Morph transaction, not a fixture.
+
+The pre-battle foundation is defined in [docs/PRE-BATTLE-REFLEXES.md](docs/PRE-BATTLE-REFLEXES.md). Code Haven, Nursery-pair, hatch/graduation, recovery, admitted-frame transport, Void, and environmental-life operations are named reflexes; generic placement never substitutes for their transaction rules. Battle remains blocked until all nine are proven.
 
 Read operations require Home Assistant authentication. Mutation operations require a Home Assistant administrator. HTTP success alone never establishes
 ownership; transfer remains prepare, accept, commit, and reconciliation.

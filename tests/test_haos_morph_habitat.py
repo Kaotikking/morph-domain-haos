@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from copy import deepcopy
 import hashlib
 import importlib.util
 import json
@@ -123,6 +124,94 @@ def aligned_in_code_haven(now):
         "snapshot_digest": morph["snapshot_digest"],
     }
     return ledger, alignment_id
+
+
+def test_foundation_code_haven_admission_and_discharge_are_bound_transactions():
+    now = datetime(2026, 9, 19, tzinfo=UTC)
+    ledger = hosted(now)
+    admitted = habitat.admit_code_haven(ledger, {
+        "schema": habitat.FOUNDATION_REFLEX_SCHEMA, "event_id": "haven-admit-1",
+        "morph_id": "pulse", "reason": "DIAGNOSTIC",
+    }, now)
+    assert admitted["prior_place"] == "HORIZON"
+    assert admitted["place"] == "CODE_HAVEN"
+    assert habitat.admit_code_haven(ledger, {
+        "schema": habitat.FOUNDATION_REFLEX_SCHEMA, "event_id": "haven-admit-1",
+        "morph_id": "pulse", "reason": "DIAGNOSTIC",
+    }, now) == admitted
+    discharged = habitat.discharge_code_haven(ledger, {
+        "schema": habitat.FOUNDATION_REFLEX_SCHEMA, "event_id": "haven-out-1",
+        "morph_id": "pulse", "admission_id": "haven-admit-1", "target_place": "HORIZON",
+    }, now + timedelta(seconds=1))
+    assert discharged["state"] == "DISCHARGED"
+    assert discharged["place"] == "HORIZON"
+    assert ledger.data["operations"]["haven-admit-1"]["state"] == "DISCHARGED"
+
+
+def test_foundation_nursery_pair_is_atomic_and_starts_compatibility_window():
+    now = datetime(2026, 9, 19, tzinfo=UTC)
+    ledger = hosted(now)
+    second = deepcopy(ledger.data["morphs"]["pulse"])
+    second["morph_id"] = "ember"
+    second["founder_id"] = "EMBER"
+    second["device_birth_lineage"] = "lineage-ember"
+    second["snapshot"]["payload"]["saved_epoch_seconds"] += 1
+    transfer.refresh_snapshot(second)
+    ledger.data["morphs"]["ember"] = second
+    result = habitat.admit_nursery_pair(ledger, {
+        "schema": habitat.FOUNDATION_REFLEX_SCHEMA, "event_id": "pair-1",
+        "first_morph_id": "pulse", "second_morph_id": "ember",
+    }, now)
+    assert result["state"] == "SOCIALIZING"
+    assert result["compatibility_window_seconds"] == 5
+    assert {ledger.data["morphs"][m]["habitat"]["place"] for m in ("pulse", "ember")} == {"NURSERY"}
+
+
+def test_foundation_nursery_pair_preflight_leaves_both_untouched_on_failure():
+    now = datetime(2026, 9, 19, tzinfo=UTC)
+    ledger = hosted(now)
+    with pytest.raises(transfer.TransferError) as error:
+        habitat.admit_nursery_pair(ledger, {
+            "schema": habitat.FOUNDATION_REFLEX_SCHEMA, "event_id": "pair-fail",
+            "first_morph_id": "pulse", "second_morph_id": "missing",
+        }, now)
+    assert error.value.code == "NOT_FOUND"
+    assert habitat.habitat_status(ledger, "pulse", now)["place"] == "HORIZON"
+
+
+def test_foundation_void_requires_exact_receipt_digest_and_lock_expiry():
+    now = datetime(2026, 9, 19, tzinfo=UTC)
+    ledger = hosted(now)
+    stasis = habitat.enter_void_stasis(ledger, {
+        "schema": habitat.FOUNDATION_REFLEX_SCHEMA, "event_id": "void-1", "morph_id": "pulse",
+    }, now)
+    assert stasis["state"] == "STASIS"
+    request = {"schema": habitat.FOUNDATION_REFLEX_SCHEMA, "event_id": "void-out-1",
+        "morph_id": "pulse", "stasis_id": "void-1", "target_place": "HORIZON"}
+    with pytest.raises(transfer.TransferError) as error:
+        habitat.withdraw_void_stasis(ledger, request, now + timedelta(hours=23))
+    assert error.value.code == "VOID_LOCKED"
+    result = habitat.withdraw_void_stasis(ledger, request, now + timedelta(hours=24, seconds=1))
+    assert result["state"] == "WITHDRAWN"
+    assert result["place"] == "HORIZON"
+
+
+def test_foundation_generic_egg_hatches_gets_pool_name_then_can_graduate():
+    now = datetime(2026, 9, 19, tzinfo=UTC)
+    ledger = hosted_v3(now)
+    morph = ledger.data["morphs"]["pulse"]
+    morph["founder_id"] = "DUST-LINEAGE"
+    core = morph["snapshot"]["payload"]["morph_core"]
+    core["identity"]["primitive_element"] = "EARTH"
+    core["embodiment"] = {"body_id": "egg-dust", "body_class": "morph-egg", "capabilities": ["hatch"]}
+    habitat.place_morph(ledger, {"schema": habitat.HABITAT_SCHEMA, "event_id": "egg-in",
+        "morph_id": "pulse", "place": "NURSERY"}, now)
+    transfer.refresh_snapshot(morph)
+    result = habitat.hatch_egg(ledger, {"schema": habitat.FOUNDATION_REFLEX_SCHEMA,
+        "event_id": "egg-hatch", "morph_id": "pulse"}, now + timedelta(hours=72))
+    assert result["state"] == "HATCHED"
+    assert result["display_name"]
+    assert core["embodiment"]["body_class"] == "morph-juvenile"
 
 
 def test_untouched_auto_alignment_discharge_is_single_and_preserves_identity():

@@ -128,6 +128,22 @@ class MorphHabitatHistoryView(HomeAssistantView):
             return self.json({"ok": False, "error": {"code": err.code, "message": str(err)}}, status_code=409)
 
 
+class MorphWindowView(HomeAssistantView):
+    """Authenticated, side-effect-free consumer projection for a dedicated frame."""
+
+    url = "/api/morph-domain/v1/window/{morph_id}"
+    name = "api:morph-domain:v1:window:get"
+    requires_auth = True
+
+    async def get(self, request: Any, morph_id: str) -> Any:
+        manager: MorphTransferManager = request.app["hass"].data[DATA_KEY]
+        try:
+            result = await manager.handle_habitat("window", {"morph_id": morph_id})
+            return self.json({"ok": True, "result": result})
+        except TransferError as err:
+            return self.json({"ok": False, "error": {"code": err.code, "message": str(err)}}, status_code=409)
+
+
 class MorphHabitatRuntimeView(HomeAssistantView):
     """Authenticated scheduler witness; reading it never advances Morph life."""
 
@@ -152,6 +168,7 @@ async def async_setup_morph_habitat(hass: HomeAssistant) -> None:
     hass.http.register_view(MorphHabitatStatusView)
     hass.http.register_view(MorphHabitatListView)
     hass.http.register_view(MorphHabitatHistoryView)
+    hass.http.register_view(MorphWindowView)
     hass.http.register_view(MorphHabitatRuntimeView)
     hass.http.register_view(MorphSernView)
     async def handle_place(call: Any) -> None:
@@ -191,6 +208,55 @@ async def async_setup_morph_habitat(hass: HomeAssistant) -> None:
         await manager.recall_from_frame({"schema": HABITAT_SCHEMA, "morph_id": morph_id,
                                          "source_frame": morph.get("source_frame")})
 
+    async def handle_code_haven_admit(call: Any) -> None:
+        await hass.data[DATA_KEY].handle_habitat("code-haven-admit", {
+            "schema": FOUNDATION_REFLEX_SCHEMA, "event_id": call.context.id or str(uuid.uuid4()),
+            "morph_id": call.data["morph_id"], "reason": call.data.get("reason", "OPERATOR_DIAGNOSTIC"),
+        })
+
+    async def handle_code_haven_discharge(call: Any) -> None:
+        manager = hass.data[DATA_KEY]
+        morph_id = str(call.data["morph_id"])
+        admission = next((operation_id for operation_id, operation in reversed(list(manager.ledger.data["operations"].items()))
+            if operation.get("operation_kind") == "CODE_HAVEN_ADMISSION"
+            and operation.get("morph_id") == morph_id and operation.get("state") == "ADMITTED"), None)
+        if admission is None:
+            raise TransferError("ADMISSION_RECEIPT_REQUIRED", "no open Code Haven admission exists")
+        await manager.handle_habitat("code-haven-discharge", {
+            "schema": FOUNDATION_REFLEX_SCHEMA, "event_id": call.context.id or str(uuid.uuid4()),
+            "morph_id": morph_id, "admission_id": admission, "target_place": call.data.get("target_place", "HORIZON"),
+        })
+
+    async def handle_nursery_pair(call: Any) -> None:
+        await hass.data[DATA_KEY].handle_habitat("nursery-pair-admit", {
+            "schema": FOUNDATION_REFLEX_SCHEMA, "event_id": call.context.id or str(uuid.uuid4()),
+            "first_morph_id": call.data["first_morph_id"], "second_morph_id": call.data["second_morph_id"],
+        })
+
+    async def handle_transfer_recovery(call: Any) -> None:
+        await hass.data[DATA_KEY].handle_habitat("recover-transfers", {
+            "schema": FOUNDATION_REFLEX_SCHEMA, "event_id": call.context.id or str(uuid.uuid4()),
+        })
+
+    async def handle_void_enter(call: Any) -> None:
+        await hass.data[DATA_KEY].handle_habitat("void-enter", {
+            "schema": FOUNDATION_REFLEX_SCHEMA, "event_id": call.context.id or str(uuid.uuid4()),
+            "morph_id": call.data["morph_id"],
+        })
+
+    async def handle_void_withdraw(call: Any) -> None:
+        manager = hass.data[DATA_KEY]
+        morph_id = str(call.data["morph_id"])
+        stasis_id = next((operation_id for operation_id, operation in reversed(list(manager.ledger.data["operations"].items()))
+            if operation.get("operation_kind") == "VOID_STASIS" and operation.get("morph_id") == morph_id
+            and operation.get("state") == "STASIS"), None)
+        if stasis_id is None:
+            raise TransferError("STASIS_RECEIPT_REQUIRED", "no active Void stasis receipt exists")
+        await manager.handle_habitat("void-withdraw", {
+            "schema": FOUNDATION_REFLEX_SCHEMA, "event_id": call.context.id or str(uuid.uuid4()),
+            "morph_id": morph_id, "stasis_id": stasis_id, "target_place": call.data.get("target_place", "HORIZON"),
+        })
+
     hass.services.async_register(
         "morph_domain", "morph_place", handle_place,
         schema=vol.Schema({vol.Required("morph_id"): str,
@@ -208,6 +274,32 @@ async def async_setup_morph_habitat(hass: HomeAssistant) -> None:
     hass.services.async_register(
         "morph_domain", "recall_to_horizon", handle_recall_to_horizon,
         schema=vol.Schema({vol.Required("morph_id"): str}),
+    )
+    hass.services.async_register(
+        "morph_domain", "code_haven_admit", handle_code_haven_admit,
+        schema=vol.Schema({vol.Required("morph_id"): str, vol.Optional("reason"): str}),
+    )
+    hass.services.async_register(
+        "morph_domain", "code_haven_discharge", handle_code_haven_discharge,
+        schema=vol.Schema({vol.Required("morph_id"): str,
+                           vol.Optional("target_place", default="HORIZON"): vol.In(["HORIZON"])}),
+    )
+    hass.services.async_register(
+        "morph_domain", "nursery_pair_admit", handle_nursery_pair,
+        schema=vol.Schema({vol.Required("first_morph_id"): str, vol.Required("second_morph_id"): str}),
+    )
+    hass.services.async_register(
+        "morph_domain", "recover_transfers", handle_transfer_recovery,
+        schema=vol.Schema({}),
+    )
+    hass.services.async_register(
+        "morph_domain", "void_enter", handle_void_enter,
+        schema=vol.Schema({vol.Required("morph_id"): str}),
+    )
+    hass.services.async_register(
+        "morph_domain", "void_withdraw", handle_void_withdraw,
+        schema=vol.Schema({vol.Required("morph_id"): str,
+                           vol.Optional("target_place", default="HORIZON"): vol.In(["HORIZON", "CODE_HAVEN"])}),
     )
     runtime = {
         "cancel": None,
