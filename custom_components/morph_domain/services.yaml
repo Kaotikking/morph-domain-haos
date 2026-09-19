@@ -29,3 +29,14 @@ morph_care:
       selector:
         select:
           options: [FEED, WATER, PLAY, REST]
+
+return_to_birth_frame:
+  name: Return Morph to birth frame
+  description: Run the complete destination-owned return reflex and release HAOS custody only after durable frame staging.
+  fields:
+    morph_id:
+      name: Morph ID
+      required: true
+      selector:
+        text:
+
