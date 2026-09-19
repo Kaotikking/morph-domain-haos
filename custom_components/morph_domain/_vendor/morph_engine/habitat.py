@@ -558,10 +558,9 @@ def run_social_reflexes(ledger: MorphTransferLedger, now: datetime) -> bool:
         # A reciprocal event must have a real effect on both lives. The outer
         # manager persists the cloned ledger atomically after this whole tick.
         for subject_id in (first_id, partner_id):
-            care_for_morph(ledger, {
-                "schema": HABITAT_SCHEMA, "event_id": f"{event_id}:play:{subject_id}",
-                "morph_id": subject_id, "action": "PLAY",
-            }, now, origin="ENVIRONMENT")
+            apply_environment_interaction(
+                ledger, morph_id=subject_id, event_id=f"{event_id}:play:{subject_id}",
+                activity="PLAY", now=now)
         for subject_id, partner, habitat, edge in (
             (first_id, partner_id, first_habitat, a_edge),
             (partner_id, first_id, second_habitat, b_edge),
@@ -608,8 +607,6 @@ def run_social_reflexes(ledger: MorphTransferLedger, now: datetime) -> bool:
         decision = choose_horizon_activity(candidates[morph_id], window=horizon_window)
         if decision["decision"] != "ENCOUNTER":
             continue
-        action = {"EAT": "FEED", "DRINK": "WATER", "REST": "REST",
-                  "PLAY": "PLAY", "EXPLORE": "EXPLORE"}[decision["activity"]]
         choices = HORIZON_ACTIVITY_OBJECTS[decision["activity"]]
         core = ledger.data["morphs"][morph_id]["snapshot"]["payload"].get("morph_core", {})
         if core.get("schema") == MORPH_NINE_CORE_SCHEMA:
@@ -625,9 +622,9 @@ def run_social_reflexes(ledger: MorphTransferLedger, now: datetime) -> bool:
             except (KeyError, WorldObjectError):
                 # Unknown element is not permission to invent a rest scene.
                 continue
-        care_for_morph(ledger, {"schema": HABITAT_SCHEMA,
-                                "event_id": f"{event_id}:care", "morph_id": morph_id,
-                                "action": action}, now, origin="ENVIRONMENT")
+        apply_environment_interaction(
+            ledger, morph_id=morph_id, event_id=f"{event_id}:environment",
+            activity=decision["activity"], now=now)
         habitat["social"]["event_ids"].append(event_id)
         del habitat["social"]["event_ids"][:-HISTORY_CAPACITY]
         habitat["social"]["last_activity"] = {"at": _iso(now), "kind": decision["activity"],
@@ -823,6 +820,11 @@ def habitat_status(ledger: MorphTransferLedger, morph_id: str, now: datetime) ->
         "source_frame": morph["source_frame"],
         "authority": morph["authority"],
         "generation": morph["generation"],
+        "custody_revision": morph["generation"],
+        "lineage_generation": (
+            morph["snapshot"]["payload"].get("morph_core", {}).get("root", {}).get("identity", {}).get("generation",
+            morph["snapshot"]["payload"].get("morph_core", {}).get("identity", {}).get("generation"))
+        ),
         "snapshot_digest": morph["snapshot_digest"],
         "engine_state": morph["engine_state"],
         "habitat_engine_state": "ACTIVE" if morph["authority"] == "HAOS" and habitat["place"] in ACTIVE_PLACES else "STASIS" if habitat["place"] == "VOID" else "DIAGNOSTIC_HOLD" if habitat["place"] == "CODE_HAVEN" else "REMOTE",
@@ -839,6 +841,7 @@ def habitat_status(ledger: MorphTransferLedger, morph_id: str, now: datetime) ->
             "call_available": bool(dedicated_frame and committed_inbound
                                    and morph["authority"] == "HAOS"
                                    and habitat["place"] == "HORIZON"),
+            "recall_available": bool(dedicated_frame and morph["authority"] == source_frame),
         },
         "founder_axes": deepcopy(habitat["founder_axes"]),
         "social": deepcopy(habitat["social"]),
@@ -913,26 +916,9 @@ def place_morph(ledger: MorphTransferLedger, request: dict[str, Any], now: datet
     return habitat_status(ledger, morph["morph_id"], now)
 
 
-def care_for_morph(ledger: MorphTransferLedger, request: dict[str, Any], now: datetime,
-                   *, origin: str = "OPERATOR") -> dict[str, Any]:
-    _exact(request, {"schema", "event_id", "morph_id", "action"}, "care request")
-    if request["schema"] != HABITAT_SCHEMA or request["action"] not in CARE_ACTIONS:
-        raise TransferError("INVALID_CARE", "care action is not admitted")
-    morph = ledger.data["morphs"].get(str(request["morph_id"]))
-    if not morph:
-        raise TransferError("NOT_FOUND", "Morph is not known to HAOS")
-    _require_haos(morph)
-    habitat = _habitat(morph, now)
-    if habitat["place"] in {"VOID", "CODE_HAVEN"}:
-        raise TransferError("PLACE_REJECTS_CARE", "current place does not permit ordinary care")
-    event_id = str(request["event_id"])
-    if event_id in habitat["event_ids"]:
-        return habitat_status(ledger, morph["morph_id"], now)
-    if origin not in {"OPERATOR", "ENVIRONMENT"}:
-        raise TransferError("INVALID_CARE_ORIGIN", "care origin is not admitted")
-    steps = 2 if origin == "OPERATOR" else 1
+def _apply_life_gain(morph: dict[str, Any], action: str, steps: int) -> tuple[int, int, dict[str, Any]]:
+    """Apply one bounded need gain; callers define its attributable source."""
     payload = morph["snapshot"]["payload"]
-    action = request["action"]
     if action == "FEED":
         before, after = _raise_care(payload, "food_q8", steps)
         payload["attention_q8"] = min(255, int(payload["attention_q8"]) + 8)
@@ -960,13 +946,64 @@ def care_for_morph(ledger: MorphTransferLedger, request: dict[str, Any], now: da
         payload["arousal_q8"] = max(0, int(payload["arousal_q8"]) - 24)
         payload["behavior"] = "DOZE"
         memory = {"code": "REST", "age_ms": 0, "weight": 220}
+    return before, after, memory
+
+
+def apply_environment_interaction(ledger: MorphTransferLedger, *, morph_id: str,
+                                  event_id: str, activity: str, now: datetime) -> dict[str, Any]:
+    """Record a Morph-chosen world interaction (+1); this is not operator care."""
+    action = {"EAT": "FEED", "DRINK": "WATER", "REST": "REST",
+              "PLAY": "PLAY", "EXPLORE": "EXPLORE"}.get(activity)
+    if action is None:
+        raise TransferError("INVALID_ENVIRONMENT_INTERACTION", "world activity is not admitted")
+    morph = ledger.data["morphs"].get(str(morph_id))
+    if not morph:
+        raise TransferError("NOT_FOUND", "Morph is not known to HAOS")
+    _require_haos(morph)
+    habitat = _habitat(morph, now)
+    if habitat["place"] not in {"HORIZON", "SEREIN_GARDENS"}:
+        raise TransferError("PLACE_REJECTS_INTERACTION", "current place has no active world interaction")
+    if event_id in habitat["event_ids"]:
+        return habitat_status(ledger, morph_id, now)
+    before, after, memory = _apply_life_gain(morph, action, 1)
+    payload = morph["snapshot"]["payload"]
+    payload["saved_epoch_seconds"] = int(now.timestamp())
+    payload["memories"] = (payload["memories"] + [memory])[-8:]
+    habitat["last_tick_at"] = _iso(now)
+    habitat["event_ids"].append(event_id)
+    del habitat["event_ids"][:-HISTORY_CAPACITY]
+    _record(habitat, {"event_id": event_id, "at": _iso(now),
+                      "type": "ENVIRONMENT_INTERACTION", "activity": activity,
+                      "level_before": before, "level_after": after})
+    _sync_morph_core_state(morph)
+    refresh_snapshot(morph)
+    return habitat_status(ledger, morph_id, now)
+
+
+def care_for_morph(ledger: MorphTransferLedger, request: dict[str, Any], now: datetime) -> dict[str, Any]:
+    _exact(request, {"schema", "event_id", "morph_id", "action"}, "care request")
+    if request["schema"] != HABITAT_SCHEMA or request["action"] not in CARE_ACTIONS:
+        raise TransferError("INVALID_CARE", "care action is not admitted")
+    morph = ledger.data["morphs"].get(str(request["morph_id"]))
+    if not morph:
+        raise TransferError("NOT_FOUND", "Morph is not known to HAOS")
+    _require_haos(morph)
+    habitat = _habitat(morph, now)
+    if habitat["place"] in {"VOID", "CODE_HAVEN"}:
+        raise TransferError("PLACE_REJECTS_CARE", "current place does not permit ordinary care")
+    event_id = str(request["event_id"])
+    if event_id in habitat["event_ids"]:
+        return habitat_status(ledger, morph["morph_id"], now)
+    payload = morph["snapshot"]["payload"]
+    action = request["action"]
+    before, after, memory = _apply_life_gain(morph, action, 2)
     payload["saved_epoch_seconds"] = int(now.timestamp())
     payload["memories"] = (payload["memories"] + [memory])[-8:]
     habitat["last_tick_at"] = _iso(now)
     habitat["event_ids"].append(event_id)
     del habitat["event_ids"][:-HISTORY_CAPACITY]
     _record(habitat, {"event_id": event_id, "at": _iso(now), "type": "CARE", "action": action,
-                      "origin": origin, "level_before": before, "level_after": after})
+                      "origin": "OPERATOR", "level_before": before, "level_after": after})
     _sync_morph_core_state(morph)
     refresh_snapshot(morph)
     return habitat_status(ledger, morph["morph_id"], now)
