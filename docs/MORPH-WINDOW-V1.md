@@ -29,3 +29,16 @@ The first physical acceptance target is Sentinel's dedicated frame. That OTA
 must consume this published contract, cache the last valid digest-bound window,
 and preserve the existing destination-owned transfer protocol.
 
+## Frame delivery
+
+MorphDomain may deliver the reduced window through an encrypted, local ESPHome
+API action when the admitted frame advertises one. Delivery is best-effort and
+presentation-only: an offline or older frame cannot block Morph life, custody,
+or transfer. Frames validate identity, schema, digests, row count, and authority
+before replacing their durable last-trusted cache. No Home Assistant bearer
+credential is stored on a frame.
+
+Sentinel's admitted action is `pet_frame_v12_morph_window_update`. Its diagnostic
+state exposes the accepted window mode, place, custody revision, lineage
+generation, and link status without exposing private Morph history.
+
