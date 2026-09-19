@@ -69,6 +69,8 @@ class MorphHabitatView(HomeAssistantView):
                 body["operator_id"] = request["hass_user"].id
             if action == "return-frame":
                 result = await manager.return_to_frame(body)
+            elif action == "recall-frame":
+                result = await manager.recall_from_frame(body)
             else:
                 result = await manager.handle_habitat(action, body)
             return self.json({"ok": True, "result": result})
@@ -180,6 +182,15 @@ async def async_setup_morph_habitat(hass: HomeAssistant) -> None:
             "target_frame": morph.get("source_frame"),
         })
 
+    async def handle_recall_to_horizon(call: Any) -> None:
+        manager = hass.data[DATA_KEY]
+        morph_id = str(call.data["morph_id"])
+        morph = manager.ledger.data.get("morphs", {}).get(morph_id)
+        if morph is None:
+            raise TransferError("NOT_FOUND", "Morph is not admitted")
+        await manager.recall_from_frame({"schema": HABITAT_SCHEMA, "morph_id": morph_id,
+                                         "source_frame": morph.get("source_frame")})
+
     hass.services.async_register(
         "morph_domain", "morph_place", handle_place,
         schema={"morph_id": str, "place": vol.In(sorted(PLACES))},
@@ -190,6 +201,10 @@ async def async_setup_morph_habitat(hass: HomeAssistant) -> None:
     )
     hass.services.async_register(
         "morph_domain", "return_to_birth_frame", handle_return_to_birth_frame,
+        schema={"morph_id": str},
+    )
+    hass.services.async_register(
+        "morph_domain", "recall_to_horizon", handle_recall_to_horizon,
         schema={"morph_id": str},
     )
     runtime = {
