@@ -176,6 +176,7 @@ def test_android_call_requires_committed_haos_horizon_morph():
         "dedicated": True,
         "target_frame": request["target_frame"],
         "call_available": True,
+        "recall_available": False,
     }
 
     changed = dict(request)
@@ -465,14 +466,18 @@ def test_care_labels_distinguish_operator_and_horizon_and_cap_at_five():
     assert morph["habitat"]["history"][-1]["origin"] == "OPERATOR"
     morph["snapshot"]["payload"]["food_q8"] = 0
     transfer.refresh_snapshot(morph)
-    environment = {**request, "event_id": "horizon-grove"}
-    status = habitat.care_for_morph(ledger, environment, now, origin="ENVIRONMENT")
+    status = habitat.apply_environment_interaction(
+        ledger, morph_id="pulse", event_id="horizon-grove", activity="EAT", now=now)
     assert status["care_levels"]["food"] == 2
-    assert habitat.care_for_morph(ledger, environment, now, origin="ENVIRONMENT")["care_levels"]["food"] == 2
-    assert morph["habitat"]["history"][-1]["origin"] == "ENVIRONMENT"
+    assert habitat.apply_environment_interaction(
+        ledger, morph_id="pulse", event_id="horizon-grove", activity="EAT", now=now
+    )["care_levels"]["food"] == 2
+    assert morph["habitat"]["history"][-1]["type"] == "ENVIRONMENT_INTERACTION"
+    assert "origin" not in morph["habitat"]["history"][-1]
     for index in range(3):
-        status = habitat.care_for_morph(ledger, {**environment,
-                 "event_id": f"horizon-grove-{index}"}, now, origin="ENVIRONMENT")
+        status = habitat.apply_environment_interaction(
+            ledger, morph_id="pulse", event_id=f"horizon-grove-{index}",
+            activity="EAT", now=now)
     assert status["care_levels"]["food"] == 5
 
 
