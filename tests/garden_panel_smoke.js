@@ -127,7 +127,7 @@ panel.refresh().then(async () => {
   panel.rows[0].place = "HORIZON";
   panel.rows[0].frame_return = { dedicated: true, target_frame: "android-frame:v1:pulse", call_available: true };
   await panel.callFrame("pulse");
-  assert.equal(calls[0].route, "morph-domain/v1/habitat/call");
+  assert.equal(calls[0].route, "morph-domain/v1/habitat/return-frame");
   assert.equal(calls[0].body.target_frame, "android-frame:v1:pulse");
   assert.equal(calls[0].body.morph_id, "pulse");
   calls.length = 0;
