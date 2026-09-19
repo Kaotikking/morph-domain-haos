@@ -109,5 +109,9 @@ def test_scheduler_awaits_tick_on_home_assistant_event_loop():
     assert "async def async_tick_habitats" in habitat
     assert "await hass.data[DATA_KEY].tick_habitats()" in habitat
     assert "lambda _: hass.async_create_task" not in habitat
+def test_haos_services_register_callable_voluptuous_schemas():
+    source = (COMPONENT / "morph_habitat.py").read_text()
+    assert source.count("schema=vol.Schema(") >= 4
+    assert 'schema={"morph_id": str}' not in source
 
 
