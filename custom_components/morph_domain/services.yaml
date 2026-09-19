@@ -40,3 +40,13 @@ return_to_birth_frame:
       selector:
         text:
 
+recall_to_horizon:
+  name: Recall Morph to Horizon
+  description: Freeze the admitted birth frame, import its current nine-core snapshot, commit HAOS custody, and place the Morph in Horizon.
+  fields:
+    morph_id:
+      name: Morph ID
+      required: true
+      selector:
+        text:
+
