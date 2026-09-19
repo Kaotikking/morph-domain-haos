@@ -152,6 +152,7 @@ def _habitat(morph: dict[str, Any], now: datetime) -> dict[str, Any]:
         "last_sample": None,
     })
     habitat.setdefault("presentation", neutral_presentation(morph["morph_id"]))
+    habitat.setdefault("invalidated_event_ids", [])
     habitat.setdefault("founder_axes", {})
     habitat.setdefault("social", {"edges": {}, "event_ids": [], "last_activity": None})
     habitat.setdefault("games", {"sessions": {}, "last_reward_window": None})
@@ -1113,4 +1114,48 @@ def call_morph(ledger: MorphTransferLedger, request: dict[str, Any], now: dateti
         "state": "CALL_READY",
         "transfer_required": True,
     }
+
+
+def correct_habitat_event(ledger: MorphTransferLedger, request: dict[str, Any], now: datetime) -> dict[str, Any]:
+    """Append an attributable Code Haven correction without erasing history."""
+    _exact(request, {"schema", "event_id", "morph_id", "invalid_event_id", "reason"}, "history correction request")
+    if request["schema"] != HABITAT_SCHEMA:
+        raise TransferError("INVALID_SCHEMA", "correction schema is not admitted")
+    morph = ledger.data["morphs"].get(str(request["morph_id"]))
+    if not morph:
+        raise TransferError("NOT_FOUND", "Morph is not hosted")
+    _require_haos(morph)
+    habitat = _habitat(morph, now)
+    if habitat["place"] != "CODE_HAVEN":
+        raise TransferError("CODE_HAVEN_REQUIRED", "Chronicle corrections are Code Haven-only")
+    invalid_event_id = str(request["invalid_event_id"])
+    invalid = next((row for row in habitat["history"] if row.get("event_id") == invalid_event_id), None)
+    if not invalid:
+        raise TransferError("EVENT_NOT_FOUND", "invalidated Chronicle event was not found")
+    correction_id = str(request["event_id"])
+    previous = next((row for row in habitat["history"] if row.get("event_id") == correction_id), None)
+    correction = {
+        "event_id": correction_id,
+        "at": _iso(now),
+        "type": "CODE_HAVEN_CORRECTION",
+        "invalid_event_id": invalid_event_id,
+        "invalid_event_type": invalid.get("type"),
+        "reason": str(request["reason"]),
+        "reducer_effect": "EXCLUDED",
+    }
+    if previous:
+        if {k: previous.get(k) for k in correction if k != "at"} != {k: correction.get(k) for k in correction if k != "at"}:
+            raise TransferError("REPLAY_CONFLICT", "correction event payload changed")
+    else:
+        habitat["event_ids"].append(correction_id)
+        del habitat["event_ids"][:-HISTORY_CAPACITY]
+        _record(habitat, correction)
+    invalidated = habitat.setdefault("invalidated_event_ids", [])
+    if invalid_event_id not in invalidated:
+        invalidated.append(invalid_event_id)
+        del invalidated[:-HISTORY_CAPACITY]
+    refresh_snapshot(morph)
+    return {"schema": HABITAT_SCHEMA, "morph_id": morph["morph_id"], "place": habitat["place"],
+            "authority": morph["authority"], "correction": correction,
+            "invalidated_event_ids": deepcopy(invalidated)}
 
