@@ -67,7 +67,10 @@ class MorphHabitatView(HomeAssistantView):
                 if "operator_id" in body:
                     raise ValueError("operator identity is server-bound")
                 body["operator_id"] = request["hass_user"].id
-            result = await manager.handle_habitat(action, body)
+            if action == "return-frame":
+                result = await manager.return_to_frame(body)
+            else:
+                result = await manager.handle_habitat(action, body)
             return self.json({"ok": True, "result": result})
         except TransferError as err:
             return self.json({"ok": False, "error": {"code": err.code, "message": str(err)}}, status_code=409)
@@ -165,6 +168,18 @@ async def async_setup_morph_habitat(hass: HomeAssistant) -> None:
             "action": call.data["action"],
         })
 
+    async def handle_return_to_birth_frame(call: Any) -> None:
+        manager = hass.data[DATA_KEY]
+        morph_id = str(call.data["morph_id"])
+        morph = manager.ledger.data.get("morphs", {}).get(morph_id)
+        if morph is None:
+            raise TransferError("NOT_FOUND", "Morph is not admitted")
+        await manager.return_to_frame({
+            "schema": HABITAT_SCHEMA,
+            "morph_id": morph_id,
+            "target_frame": morph.get("source_frame"),
+        })
+
     hass.services.async_register(
         "morph_domain", "morph_place", handle_place,
         schema={"morph_id": str, "place": vol.In(sorted(PLACES))},
@@ -172,6 +187,10 @@ async def async_setup_morph_habitat(hass: HomeAssistant) -> None:
     hass.services.async_register(
         "morph_domain", "morph_care", handle_care,
         schema={"morph_id": str, "action": vol.In(sorted(CARE_ACTIONS))},
+    )
+    hass.services.async_register(
+        "morph_domain", "return_to_birth_frame", handle_return_to_birth_frame,
+        schema={"morph_id": str},
     )
     runtime = {
         "cancel": None,
