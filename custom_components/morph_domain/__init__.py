@@ -10,6 +10,7 @@ from .const import DOMAIN
 from .morph_habitat import HABITAT_DATA_KEY, async_setup_morph_habitat
 from .morph_transfer import DATA_KEY, async_setup_morph_transfer
 from .migration import legacy_engine_enabled
+from .native_entities import NATIVE_REGISTRY_KEY
 
 PLATFORMS = (Platform.SENSOR,)
 CARD_PATH = "/morph-domain-assets/morph-domain-panel.js"
@@ -39,6 +40,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     cancel = runtime.get("cancel") if isinstance(runtime, dict) else runtime
     if cancel is not None:
         cancel()
+    native = hass.data.pop(NATIVE_REGISTRY_KEY, None)
+    if native is not None and native.cancel is not None:
+        native.cancel()
     hass.services.async_remove(DOMAIN, "morph_place")
     hass.services.async_remove(DOMAIN, "morph_care")
     hass.data.pop(DATA_KEY, None)
