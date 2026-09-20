@@ -12,6 +12,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .morph_habitat import habitat_list
 from .morph_transfer import DATA_KEY
+from .native_entities import async_setup_native_entities
 
 
 async def async_setup_entry(
@@ -21,6 +22,7 @@ async def async_setup_entry(
 ) -> None:
     """Expose one stable, non-authoritative Horizon overview entity."""
     async_add_entities([MorphDomainHorizonEntity(hass, entry), MorphDomainEngineHealthEntity(hass, entry)], True)
+    await async_setup_native_entities(hass, entry, async_add_entities)
 
 
 class MorphDomainHorizonEntity(SensorEntity):
@@ -110,3 +112,4 @@ class MorphDomainEngineHealthEntity(SensorEntity):
             snapshot = manager.metrics.snapshot(manager.ledger.data)
         self._attr_native_value = snapshot["last_tick_duration_ms"]
         self._attr_extra_state_attributes = snapshot
+
