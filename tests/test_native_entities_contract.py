@@ -24,7 +24,7 @@ def test_devices_are_config_entry_scoped() -> None:
 
 def test_device_is_registered_before_dynamic_entities_are_added() -> None:
     register = SOURCE.index("device_registry.async_get_or_create(")
-    add_entities = SOURCE.index("self.add(new_entities, True)")
+    add_entities = SOURCE.index("await self.async_sync_platform(name)", register)
     assert register < add_entities
 
 
