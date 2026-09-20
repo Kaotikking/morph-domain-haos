@@ -223,7 +223,7 @@ class MorphTransferManager:
         started = perf_counter()
         """Mutate/read habitat state under the same durable authority lock."""
         from .migration import legacy_engine_enabled
-        if action not in {"list", "status", "history", "starter-status", "chronicle-page"} and legacy_engine_enabled(self.hass):
+        if action not in {"list", "status", "history", "starter-status", "chronicle-page", "battle-preview", "battle-history"} and legacy_engine_enabled(self.hass):
             raise TransferError("ENGINE_CONFLICT", "legacy Morph engine is active")
         from .morph_habitat import (
             advance_morph,
@@ -371,6 +371,18 @@ class MorphTransferManager:
                 from .morph_habitat import chronicle_page
                 _exact(body, {"morph_id", "after_sequence", "limit"}, "chronicle page request")
                 result = chronicle_page(candidate, str(body["morph_id"]), body["after_sequence"], body["limit"], now)
+            elif action == "battle-preview":
+                from ._vendor.morph_engine.battle import preview
+                _exact(body, {"battle_id", "first_morph_id", "second_morph_id"}, "battle preview request")
+                result = preview(candidate, str(body["first_morph_id"]), str(body["second_morph_id"]), str(body["battle_id"]))
+            elif action == "battle-history":
+                from ._vendor.morph_engine.battle import history
+                _exact(body, set(), "battle history request")
+                result = history(candidate)
+            elif action == "battle-spar":
+                from ._vendor.morph_engine.battle import resolve
+                result = resolve(candidate, body, now)
+                changed = True
             else:
                 raise TransferError("NOT_FOUND", "unknown habitat action")
             if changed:

@@ -257,6 +257,13 @@ async def async_setup_morph_habitat(hass: HomeAssistant) -> None:
             "morph_id": morph_id, "stasis_id": stasis_id, "target_place": call.data.get("target_place", "HORIZON"),
         })
 
+    async def handle_battle_spar(call: Any) -> None:
+        await hass.data[DATA_KEY].handle_habitat("battle-spar", {
+            "schema": "serein.morph-battle.v1", "battle_id": call.context.id or str(uuid.uuid4()),
+            "first_morph_id": call.data["first_morph_id"], "second_morph_id": call.data["second_morph_id"],
+            "mode": "UNRANKED_SPARRING",
+        })
+
     hass.services.async_register(
         "morph_domain", "morph_place", handle_place,
         schema=vol.Schema({vol.Required("morph_id"): str,
@@ -300,6 +307,10 @@ async def async_setup_morph_habitat(hass: HomeAssistant) -> None:
         "morph_domain", "void_withdraw", handle_void_withdraw,
         schema=vol.Schema({vol.Required("morph_id"): str,
                            vol.Optional("target_place", default="HORIZON"): vol.In(["HORIZON", "CODE_HAVEN"])}),
+    )
+    hass.services.async_register(
+        "morph_domain", "battle_spar", handle_battle_spar,
+        schema=vol.Schema({vol.Required("first_morph_id"): str, vol.Required("second_morph_id"): str}),
     )
     runtime = {
         "cancel": None,

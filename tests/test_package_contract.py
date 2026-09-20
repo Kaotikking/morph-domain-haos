@@ -128,7 +128,7 @@ def test_morph_window_is_packaged_as_an_authenticated_read_only_frame_contract()
     assert '"DOMAIN_WINDOW"' in contract and '"LOCAL_PRESENCE"' in contract
 
 
-def test_prebattle_foundation_reflexes_are_named_and_battle_stays_blocked():
+def test_prebattle_foundation_reflexes_are_named_and_battle_beta_is_bounded():
     adapter = (COMPONENT / "morph_transfer.py").read_text()
     habitat = (COMPONENT / "_vendor/morph_engine/habitat.py").read_text()
     services = (COMPONENT / "services.yaml").read_text()
@@ -141,7 +141,9 @@ def test_prebattle_foundation_reflexes_are_named_and_battle_stays_blocked():
                     "recover_transfers:", "void_enter:", "void_withdraw:"):
         assert service in services
     assert 'BATTLE_GATE' not in adapter
-    assert 'BLOCKED_UNTIL_REFLEXES_1_9_PROVEN' in habitat
+    assert 'READY_UNRANKED_BETA' in habitat
+    assert 'battle-spar' in adapter
+    assert 'battle_spar:' in services
     assert 'morph-domain/v1/habitat/egg-hatch' in panel
     assert 'route="void-enter"' in panel
     assert 'route="code-haven-admit"' in panel
