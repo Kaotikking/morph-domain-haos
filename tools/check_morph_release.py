@@ -19,7 +19,7 @@ def main() -> int:
         return 1
     manifest = json.loads((PACKAGE / "manifest.json").read_text(encoding="utf-8"))
     hacs = json.loads((ROOT / "hacs.json").read_text(encoding="utf-8"))
-    if manifest.get("domain") != "morph_domain" or manifest.get("version") != "1.25.0" or hacs.get("name") != "MorphDomain":
+    if manifest.get("domain") != "morph_domain" or manifest.get("version") != "1.25.1" or hacs.get("name") != "MorphDomain":
         print("RELEASE_NOT_READY: package identity/version mismatch")
         return 1
     adapter = (PACKAGE / "morph_transfer.py").read_text(encoding="utf-8")
