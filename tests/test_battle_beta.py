@@ -64,7 +64,7 @@ def test_beta_fails_closed_for_void_remote_egg_unknown_and_replay_mismatch():
 
 def test_dashboard_exposes_battle_picker_under_eligible_morphs():
     panel = (Path(__file__).parents[1] / "custom_components/morph_domain/frontend/morph-domain-panel.js").read_text(encoding="utf-8")
-    assert \'data-battle data-morph-id=\' in panel
-    assert \'Choose for spar\' in panel
-    assert \'["HORIZON","SEREIN_GARDENS"].includes(m.place)\' in panel
-    assert \'this.battlePick(button.dataset.morphId)\' in panel
+    assert 'data-battle data-morph-id=' in panel
+    assert 'Choose for spar' in panel
+    assert '["HORIZON","SEREIN_GARDENS"].includes(m.place)' in panel
+    assert 'this.battlePick(button.dataset.morphId)' in panel
