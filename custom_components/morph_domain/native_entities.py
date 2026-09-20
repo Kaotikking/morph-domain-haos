@@ -26,13 +26,36 @@ REFRESH_INTERVAL = timedelta(seconds=30)
 class MorphNativeRegistry:
     """Share one authoritative roster read across all native entities."""
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, add: AddEntitiesCallback) -> None:
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.hass = hass
         self.entry = entry
-        self.add = add
         self.rows: dict[str, dict[str, Any]] = {}
         self.entities: dict[str, list[MorphNativeEntity]] = {}
+        self.platforms: dict[str, tuple[AddEntitiesCallback, Any]] = {}
+        self.platform_entities: dict[str, set[str]] = {}
         self.cancel = None
+
+    async def async_register_platform(
+        self, name: str, add: AddEntitiesCallback, factory: Any
+    ) -> None:
+        """Register one entity platform against the shared authoritative roster."""
+        self.platforms[name] = (add, factory)
+        self.platform_entities.setdefault(name, set())
+        await self.async_sync_platform(name)
+
+    async def async_sync_platform(self, name: str) -> None:
+        add, factory = self.platforms[name]
+        emitted = self.platform_entities[name]
+        new_entities: list[Any] = []
+        for morph_id in sorted(self.rows):
+            if morph_id in emitted:
+                continue
+            group = list(factory(self, morph_id))
+            emitted.add(morph_id)
+            self.entities.setdefault(morph_id, []).extend(group)
+            new_entities.extend(group)
+        if new_entities:
+            add(new_entities, True)
 
     async def async_start(self) -> None:
         await self.async_refresh(None)
@@ -44,11 +67,8 @@ class MorphNativeRegistry:
             result = habitat_list(manager.ledger, datetime.now(UTC))
         self.rows = {row["morph_id"]: row for row in result["morphs"]}
 
-        new_entities: list[MorphNativeEntity] = []
         device_registry = dr.async_get(self.hass)
         for morph_id in sorted(self.rows):
-            if morph_id in self.entities:
-                continue
             row = self.rows[morph_id]
             # Register first so the entity callback and the first area sync cannot race.
             # The lookup identity is scoped to this config entry, as required by the
@@ -62,12 +82,8 @@ class MorphNativeRegistry:
                 sw_version=ENGINE_VERSION,
                 suggested_area=native_area(row),
             )
-            group: list[MorphNativeEntity] = [MorphStatusEntity(self, morph_id)]
-            group.extend(MorphCoreEntity(self, morph_id, core) for core in CORE_ORDER)
-            self.entities[morph_id] = group
-            new_entities.extend(group)
-        if new_entities:
-            self.add(new_entities, True)
+        for name in tuple(self.platforms):
+            await self.async_sync_platform(name)
 
         for group in self.entities.values():
             for entity in group:
@@ -192,7 +208,12 @@ async def async_setup_native_entities(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    registry = MorphNativeRegistry(hass, entry, async_add_entities)
-    hass.data[NATIVE_REGISTRY_KEY] = registry
-    await registry.async_start()
+    registry = hass.data[NATIVE_REGISTRY_KEY]
+
+    def factory(shared: MorphNativeRegistry, morph_id: str) -> list[MorphNativeEntity]:
+        group: list[MorphNativeEntity] = [MorphStatusEntity(shared, morph_id)]
+        group.extend(MorphCoreEntity(shared, morph_id, core) for core in CORE_ORDER)
+        return group
+
+    await registry.async_register_platform("sensor", async_add_entities, factory)
 

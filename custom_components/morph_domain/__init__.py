@@ -10,9 +10,9 @@ from .const import DOMAIN
 from .morph_habitat import HABITAT_DATA_KEY, async_setup_morph_habitat
 from .morph_transfer import DATA_KEY, async_setup_morph_transfer
 from .migration import legacy_engine_enabled
-from .native_entities import NATIVE_REGISTRY_KEY
+from .native_entities import MorphNativeRegistry, NATIVE_REGISTRY_KEY
 
-PLATFORMS = (Platform.SENSOR,)
+PLATFORMS = (Platform.SENSOR, Platform.BUTTON)
 CARD_PATH = "/morph-domain-assets/morph-domain-panel.js"
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -22,6 +22,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         return False
     await async_setup_morph_transfer(hass)
     await async_setup_morph_habitat(hass)
+    native = MorphNativeRegistry(hass, entry)
+    hass.data[NATIVE_REGISTRY_KEY] = native
+    await native.async_start()
     if not hass.data.get("morph_domain_card_registered"):
         await hass.http.async_register_static_paths([
             StaticPathConfig(CARD_PATH, str(Path(__file__).parent / "frontend" / "morph-domain-panel.js"), False)
