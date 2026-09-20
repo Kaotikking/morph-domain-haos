@@ -13,7 +13,7 @@ def test_native_button_module_compiles_and_platform_is_loaded():
     ast.parse(BUTTON.read_text(encoding="utf-8"))
     init = INIT.read_text(encoding="utf-8")
     assert "Platform.BUTTON" in init
-    assert '"version": "1.25.0"' in (ROOT / "custom_components/morph_domain/manifest.json").read_text(encoding="utf-8")
+    assert '"version": "1.25.1"' in (ROOT / "custom_components/morph_domain/manifest.json").read_text(encoding="utf-8")
 
 
 def test_buttons_delegate_to_proven_services_without_transfer_reimplementation():
