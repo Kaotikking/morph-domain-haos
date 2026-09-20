@@ -127,4 +127,16 @@ void_withdraw:
       selector:
         select:
           options: [HORIZON, CODE_HAVEN]
+battle_spar:
+  name: Start unranked Morph spar
+  description: Resolve one deterministic, non-destructive beta battle between two HAOS-owned Morphs in Horizon or Gardens.
+  fields:
+    first_morph_id:
+      required: true
+      selector:
+        text:
+    second_morph_id:
+      required: true
+      selector:
+        text:
 

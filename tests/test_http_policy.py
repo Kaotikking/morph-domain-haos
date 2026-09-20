@@ -19,7 +19,7 @@ def test_exact_authenticated_read_actions_do_not_require_admin():
     for action in ("status", "evidence"):
         assert action_requires_admin("transfer", action) is False
         assert admin_authorized("transfer", action, User(False)) is True
-    for action in ("list", "status", "history"):
+    for action in ("list", "status", "history", "battle-preview", "battle-history"):
         assert action_requires_admin("habitat", action) is False
         assert admin_authorized("habitat", action, User(False)) is True
 
@@ -51,7 +51,7 @@ def test_truthy_non_boolean_admin_claim_is_rejected():
 def test_read_paths_never_write_even_if_maintenance_change_is_reported():
     for surface, actions in (
         ("transfer", ("status", "evidence")),
-        ("habitat", ("list", "status", "history")),
+        ("habitat", ("list", "status", "history", "battle-preview", "battle-history")),
     ):
         for action in actions:
             assert action_is_read(surface, action) is True
@@ -63,3 +63,4 @@ def test_mutations_always_require_a_durable_write():
     for surface, action in (("transfer", "prepare"), ("habitat", "care")):
         assert action_is_read(surface, action) is False
         assert durable_write_required(surface, action, False) is True
+

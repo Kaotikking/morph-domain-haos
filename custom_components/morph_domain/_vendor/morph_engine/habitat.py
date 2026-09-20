@@ -959,7 +959,7 @@ def habitat_status(ledger: MorphTransferLedger, morph_id: str, now: datetime) ->
             "hatch_available": habitat["place"] == "NURSERY" and (
                 morph.get("snapshot", {}).get("payload", {}).get("morph_core", {}).get("platform", {}).get("embodiment", {}).get("body_class") == "morph-egg"
                 or morph.get("snapshot", {}).get("payload", {}).get("morph_core", {}).get("embodiment", {}).get("body_class") == "morph-egg"),
-            "battle_gate": "BLOCKED_UNTIL_REFLEXES_1_9_PROVEN",
+            "battle_gate": "READY_UNRANKED_BETA",
         },
         "founder_axes": deepcopy(habitat["founder_axes"]),
         "social": deepcopy(habitat["social"]),

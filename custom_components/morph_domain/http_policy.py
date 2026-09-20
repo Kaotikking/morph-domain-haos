@@ -5,7 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 TRANSFER_READ_ACTIONS = frozenset({"status", "evidence", "current-snapshot"})
-HABITAT_READ_ACTIONS = frozenset({"list", "status", "history", "starter-status", "chronicle-page", "window"})
+HABITAT_READ_ACTIONS = frozenset({"list", "status", "history", "starter-status", "chronicle-page", "window",
+                                  "battle-preview", "battle-history"})
 _READ_ACTIONS = {
     "transfer": TRANSFER_READ_ACTIONS,
     "habitat": HABITAT_READ_ACTIONS,
