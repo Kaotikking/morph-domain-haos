@@ -1,5 +1,10 @@
 # MorphDomain for Home Assistant
 
+Version 1.26 adds the bounded HAOS-owned Android host-lease contract. A lease
+freezes one exact checkpoint, binds Founder/DNA/render truth and an attributable
+Gateway receipt, admits only one mobile host, fails closed on replay or expiry,
+and returns HAOS authority only after the normal successor transfer commits.
+
 MorphDomain is an optional, local-first Home Assistant habitat for Serein Morphs.
 It supplies Void, Nursery, Horizon, Serein Gardens, and Code Haven together with
 the bounded life engine and authenticated single-owner transfer contract.
@@ -106,4 +111,3 @@ MorphDomain refuses to run beside an enabled legacy engine. Reconcile every
 Morph through the MorphDomain API before changing place or authority, and never
 enable both engines concurrently. Private Morph state remains for recovery or
 reinstall; uninstall never deletes it.
-

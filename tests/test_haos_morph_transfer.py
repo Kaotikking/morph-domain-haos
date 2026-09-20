@@ -127,6 +127,124 @@ def test_round_trip_single_authority_and_idempotency():
     else: raise AssertionError("repeat return accepted wrong digest")
 
 
+def host_lease_request(ledger, now, lease_id="lease-1"):
+    current = ledger.current_snapshot("pulse")
+    receipt = {"schema": module.HOST_LEASE_RECEIPT_SCHEMA, "receipt_id": "gateway-r1",
+               "gateway": "haos-canonical-gateway", "transport": "HTTPS",
+               "observed_at": now.isoformat(), "evidence_digest": "a" * 64}
+    return {"schema": module.HOST_LEASE_REQUEST_SCHEMA, "lease_id": lease_id,
+            "morph_id": "pulse", "target_frame": "android-frame:moto-x4",
+            "issued_at": now.isoformat(), "expires_at": (now + timedelta(hours=1)).isoformat(),
+            "expected_generation": current["generation"],
+            "expected_snapshot_digest": current["snapshot_digest"],
+            "transport_receipt": receipt}
+
+
+def host_stage_receipt(prepared, now):
+    return {"schema": module.HOST_STAGE_RECEIPT_SCHEMA, "receipt_id": "android-stage-r1",
+            "lease_id": prepared["lease_id"], "target_frame": prepared["target_frame"],
+            "snapshot_digest": prepared["snapshot_digest"],
+            "render_digest": prepared["render_profile"]["render_digest"],
+            "staged_at": now.isoformat(), "evidence_digest": "b" * 64}
+
+
+def test_host_lease_is_complete_bounded_and_closes_on_successor_return():
+    now = datetime(2026, 9, 20, tzinfo=UTC)
+    ledger = module.MorphTransferLedger.empty()
+    prepared_inbound = ledger.prepare_inbound(offer(now), now)
+    ledger.commit_inbound("t1", prepared_inbound["snapshot_digest"], now)
+    request = host_lease_request(ledger, now)
+    prepared = ledger.prepare_host_lease(request, now)
+    assert prepared["schema"] == module.HOST_LEASE_SCHEMA
+    assert prepared["operation_state"] == "LEASE_PREPARED"
+    assert prepared["authority"] == "FROZEN_FOR_LEASE"
+    assert prepared["founder_id"] == "PULSE"
+    assert prepared["source_frame"] == "HAOS"
+    assert prepared["target_frame"] == "android-frame:moto-x4"
+    assert prepared["generation"] == 1 and prepared["predecessor_generation"] == 0
+    assert prepared["genome_sha256"] == ledger.data["morphs"]["pulse"]["genome_sha256"]
+    assert prepared["render_profile"]["schema"] == "serein.morph-render-profile.v1"
+    assert prepared["transport_receipt"]["receipt_id"] == "gateway-r1"
+    assert ledger.prepare_host_lease(request, now) == prepared
+    active = ledger.commit_host_lease("lease-1", prepared["snapshot_digest"],
+                                      prepared["render_profile"]["render_digest"],
+                                      host_stage_receipt(prepared, now), now)
+    assert active["operation_state"] == "ACTIVE_MOBILE"
+    assert active["authority"] == "android-frame:moto-x4"
+    assert active["destination_state"] == "DURABLE_INACTIVE"
+    assert active["render_state"] == "PENDING"
+    render_receipt = {"schema": module.HOST_RENDER_RECEIPT_SCHEMA, "receipt_id": "android-render-r1",
+                      "lease_id": "lease-1", "target_frame": "android-frame:moto-x4",
+                      "snapshot_digest": prepared["snapshot_digest"],
+                      "render_digest": prepared["render_profile"]["render_digest"],
+                      "rendered_at": now.isoformat(), "evidence_digest": "c" * 64}
+    rendered = ledger.record_host_render(render_receipt, now)
+    assert rendered["render_state"] == "VERIFIED"
+    assert rendered["render_receipt"]["receipt_id"] == "android-render-r1"
+    successor = {"schema": module.HOST_RETURN_SCHEMA, "lease_id": "lease-1", "transfer_id": "t2",
+                 "morph_id": "pulse", "source_frame": "android-frame:moto-x4",
+                 "generation": 2, "predecessor_generation": 1,
+                 "created_at": (now + timedelta(minutes=1)).isoformat(),
+                 "expires_at": (now + timedelta(minutes=6)).isoformat(),
+                 "snapshot": deepcopy(prepared["snapshot"])}
+    accepted = ledger.prepare_host_return(successor, now + timedelta(minutes=1))
+    ledger.commit_host_return("t2", accepted["snapshot_digest"], now + timedelta(minutes=1))
+    closed = ledger.status("lease-1", include_snapshot=True)
+    assert closed["operation_state"] == "LEASE_CLOSED"
+    assert closed["authority"] == "HAOS"
+    assert ledger.data["operations"]["lease-1"]["closed_by_transfer_id"] == "t2"
+
+
+def test_host_lease_replay_conflict_and_expiry_fail_closed():
+    now = datetime(2026, 9, 20, tzinfo=UTC)
+    ledger = module.MorphTransferLedger.empty()
+    incoming = ledger.prepare_inbound(offer(now), now)
+    ledger.commit_inbound("t1", incoming["snapshot_digest"], now)
+    request = host_lease_request(ledger, now)
+    prepared = ledger.prepare_host_lease(request, now)
+    changed = deepcopy(request); changed["target_frame"] = "android-frame:other"
+    try: ledger.prepare_host_lease(changed, now)
+    except module.TransferError as err: assert err.code == "REPLAY_CONFLICT"
+    else: raise AssertionError("changed host lease replay accepted")
+    assert ledger.reconcile_expired(now + timedelta(hours=2)) is True
+    status = ledger.status("lease-1", include_snapshot=True)
+    assert status["operation_state"] == "LEASE_EXPIRED"
+    assert status["authority"] == "HAOS"
+    assert ledger.data["morphs"]["pulse"]["authority"] == "HAOS"
+
+
+def test_active_host_lease_expiry_never_manufactures_haos_authority():
+    now = datetime(2026, 9, 20, tzinfo=UTC)
+    ledger = module.MorphTransferLedger.empty()
+    incoming = ledger.prepare_inbound(offer(now), now)
+    ledger.commit_inbound("t1", incoming["snapshot_digest"], now)
+    prepared = ledger.prepare_host_lease(host_lease_request(ledger, now), now)
+    ledger.commit_host_lease("lease-1", prepared["snapshot_digest"],
+                             prepared["render_profile"]["render_digest"],
+                             host_stage_receipt(prepared, now), now)
+    assert ledger.reconcile_expired(now + timedelta(hours=2)) is True
+    stale = ledger.status("lease-1", include_snapshot=True)
+    assert stale["operation_state"] == "LEASE_STALE"
+    assert stale["revocation_state"] == "REQUESTED"
+    assert stale["authority"] == "android-frame:moto-x4"
+    assert ledger.data["morphs"]["pulse"]["authority"] == "android-frame:moto-x4"
+
+
+def test_host_lease_commit_requires_exact_inactive_destination_receipt():
+    now = datetime(2026, 9, 20, tzinfo=UTC)
+    ledger = module.MorphTransferLedger.empty()
+    incoming = ledger.prepare_inbound(offer(now), now)
+    ledger.commit_inbound("t1", incoming["snapshot_digest"], now)
+    prepared = ledger.prepare_host_lease(host_lease_request(ledger, now), now)
+    bad = host_stage_receipt(prepared, now); bad["target_frame"] = "android-frame:other"
+    try:
+        ledger.commit_host_lease("lease-1", prepared["snapshot_digest"],
+                                 prepared["render_profile"]["render_digest"], bad, now)
+    except module.TransferError as err: assert err.code == "DESTINATION_NOT_DURABLE"
+    else: raise AssertionError("host lease activated without exact destination staging")
+    assert ledger.data["morphs"]["pulse"]["authority"] == "FROZEN_FOR_LEASE"
+
+
 def test_duplicate_changed_payload_and_bad_digest_fail_closed():
     now = datetime(2026, 9, 5, tzinfo=UTC)
     ledger = module.MorphTransferLedger.empty()
@@ -739,4 +857,3 @@ def test_inward_bloom_rejects_other_morph_void_or_digest_replay():
     try: ledger.record_inward_bloom(request, now)
     except module.TransferError as err: assert err.code == "PREDECESSOR_DIGEST_MISMATCH"
     else: raise AssertionError("wrong predecessor was accepted")
-

@@ -197,9 +197,11 @@ class MorphTransferManager:
                 _exact(body, {"transfer_id", "snapshot_digest"}, "commit request")
                 result = candidate.commit_inbound(str(body["transfer_id"]), str(body["snapshot_digest"]), now)
             elif action == "status":
-                if set(body) not in ({"transfer_id"}, {"return_id"}, {"transfer_id", "include_snapshot"}, {"return_id", "include_snapshot"}):
+                if set(body) not in ({"transfer_id"}, {"return_id"}, {"lease_id"},
+                                     {"transfer_id", "include_snapshot"}, {"return_id", "include_snapshot"},
+                                     {"lease_id", "include_snapshot"}):
                     raise TransferError("INVALID_SCHEMA", "status request fields are not exact")
-                result = candidate.status(str(body.get("transfer_id") or body.get("return_id")), include_snapshot=bool(body.get("include_snapshot")))
+                result = candidate.status(str(body.get("transfer_id") or body.get("return_id") or body.get("lease_id")), include_snapshot=bool(body.get("include_snapshot")))
             elif action == "current-snapshot":
                 _exact(body, {"morph_id"}, "current snapshot request")
                 result = candidate.current_snapshot(str(body["morph_id"]))
@@ -210,6 +212,23 @@ class MorphTransferManager:
             elif action == "commit-return":
                 _exact(body, {"return_id", "snapshot_digest"}, "return commit request")
                 result = candidate.commit_return(str(body["return_id"]), str(body["snapshot_digest"]), now)
+            elif action == "prepare-host-lease":
+                result = candidate.prepare_host_lease(body, now)
+            elif action == "commit-host-lease":
+                _exact(body, {"lease_id", "snapshot_digest", "render_digest", "destination_receipt"}, "host lease commit request")
+                result = candidate.commit_host_lease(str(body["lease_id"]), str(body["snapshot_digest"]),
+                                                     str(body["render_digest"]), body["destination_receipt"], now)
+            elif action == "record-host-render":
+                result = candidate.record_host_render(body, now)
+            elif action == "revoke-host-lease":
+                _exact(body, {"lease_id"}, "host lease revocation request")
+                result = candidate.revoke_host_lease(str(body["lease_id"]), now)
+            elif action == "prepare-host-return":
+                result = candidate.prepare_host_return(body, now)
+            elif action == "commit-host-return":
+                _exact(body, {"transfer_id", "snapshot_digest"}, "host return commit request")
+                result = candidate.commit_host_return(str(body["transfer_id"]),
+                                                      str(body["snapshot_digest"]), now)
             else: raise TransferError("NOT_FOUND", "unknown transfer action")
             write_required = durable_write_required("transfer", action, maintenance_changed)
             if write_required:
@@ -704,4 +723,3 @@ async def async_setup_morph_transfer(hass: HomeAssistant) -> None:
     hass.data[DATA_KEY] = manager
     hass.http.register_view(MorphTransferView)
     hass.http.register_view(MorphTransferStatusView)
-

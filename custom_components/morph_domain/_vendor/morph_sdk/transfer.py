@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 import hashlib
 import hmac
 import json
@@ -45,6 +45,13 @@ MORPH_CORE_REPAIR_SCHEMA = "serein.morph-core-repair.v1"
 INWARD_BLOOM_SCHEMA = "serein.inward-bloom.v1"
 FIRST_WHOLE_MORPH_ID = "morph-child:37ca6f7dfd4fbba83f43ab4e88f8bf90"
 MORPH_EVIDENCE_SCHEMA = "serein.morph-evidence-bundle.v1"
+HOST_LEASE_SCHEMA = "serein.morph-host-lease.v1"
+HOST_LEASE_REQUEST_SCHEMA = "serein.morph-host-lease-request.v1"
+HOST_LEASE_RECEIPT_SCHEMA = "serein.morph-transport-receipt.v1"
+HOST_STAGE_RECEIPT_SCHEMA = "serein.morph-destination-stage-receipt.v1"
+HOST_RENDER_RECEIPT_SCHEMA = "serein.morph-render-receipt.v1"
+HOST_RETURN_SCHEMA = "serein.morph-host-return.v1"
+HOST_LEASE_MAX_TTL = timedelta(hours=24)
 CANONICAL_FOUNDER_PRIMITIVES = {"PULSE": "WATER", "SPARK": "AIR"}
 ENGINE_VERSION = "android-morph-life-engine.v1"
 ESPHOME_ENGINE_VERSION = "esphome-morph-life-engine.v1"
@@ -355,6 +362,15 @@ class MorphTransferLedger:
                 "snapshot": deepcopy(morph["snapshot"]), "completed_at": observed_at,
             }
         op["state"], op["authority"] = "ACTIVE_HAOS", "HAOS"
+        for lease in self.data["operations"].values():
+            if (lease.get("operation_kind") == "HOST_LEASE"
+                    and lease.get("morph_id") == op["morph_id"]
+                    and lease.get("target_frame") == op["source_frame"]
+                    and lease.get("state") in {"ACTIVE_MOBILE", "LEASE_STALE", "REVOCATION_REQUESTED"}):
+                lease["state"], lease["authority"] = "LEASE_CLOSED", "HAOS"
+                lease["revocation_state"] = "COMPLETE"
+                lease["closed_by_transfer_id"] = transfer_id
+                lease["closed_at"] = now.astimezone(UTC).isoformat().replace("+00:00", "Z")
         return self.status(transfer_id)
 
     def migrate_to_morph_core(self, request: dict[str, Any], now: datetime) -> dict[str, Any]:
@@ -671,6 +687,282 @@ class MorphTransferLedger:
         op["completion_receipt"] = self.status(repair_id, include_snapshot=True)
         return deepcopy(op["completion_receipt"])
 
+    def prepare_host_lease(self, request: dict[str, Any], now: datetime) -> dict[str, Any]:
+        """Freeze one HAOS-owned Morph into a bounded Android host-lease offer."""
+        fields = {"schema", "lease_id", "morph_id", "target_frame", "issued_at",
+                  "expires_at", "expected_generation", "expected_snapshot_digest",
+                  "transport_receipt"}
+        _exact(request, fields, "host lease request")
+        if request["schema"] != HOST_LEASE_REQUEST_SCHEMA:
+            raise TransferError("INVALID_SCHEMA", "host lease request schema is not admitted")
+        lease_id = str(request["lease_id"])
+        morph_id = str(request["morph_id"])
+        target_frame = str(request["target_frame"])
+        if not lease_id or not target_frame.startswith("android-frame:"):
+            raise TransferError("INVALID_TARGET", "a durable lease id and Android target frame are required")
+        issued = _parse_time(request["issued_at"])
+        expires = _parse_time(request["expires_at"])
+        current_time = now.astimezone(UTC)
+        if issued > current_time or expires <= current_time or expires <= issued:
+            raise TransferError("EXPIRED", "host lease interval is not currently valid")
+        if expires - issued > HOST_LEASE_MAX_TTL:
+            raise TransferError("LEASE_TOO_LONG", "host lease exceeds the admitted 24 hour bound")
+        receipt = request["transport_receipt"]
+        if not isinstance(receipt, dict):
+            raise TransferError("INVALID_RECEIPT", "transport receipt must be an object")
+        _exact(receipt, {"schema", "receipt_id", "gateway", "transport", "observed_at",
+                         "evidence_digest"}, "transport receipt")
+        if receipt["schema"] != HOST_LEASE_RECEIPT_SCHEMA:
+            raise TransferError("INVALID_RECEIPT", "transport receipt schema is not admitted")
+        for field in ("receipt_id", "gateway", "transport", "observed_at"):
+            if not isinstance(receipt[field], str) or not receipt[field]:
+                raise TransferError("INVALID_RECEIPT", f"transport receipt {field} is required")
+        _parse_time(receipt["observed_at"])
+        if receipt["gateway"] != "haos-canonical-gateway" or receipt["transport"] not in {"HTTPS", "WSS"}:
+            raise TransferError("INVALID_RECEIPT", "host lease requires the canonical HAOS Gateway transport")
+        evidence_digest = str(receipt["evidence_digest"])
+        if len(evidence_digest) != 64 or any(ch not in "0123456789abcdef" for ch in evidence_digest):
+            raise TransferError("INVALID_RECEIPT", "transport evidence digest must be lowercase SHA-256")
+
+        existing = self.data["operations"].get(lease_id)
+        fingerprint = sha256_json(request)
+        if existing:
+            if existing.get("request_fingerprint") != fingerprint:
+                raise TransferError("REPLAY_CONFLICT", "lease id payload changed")
+            return self.status(lease_id, include_snapshot=True)
+        for operation in self.data["operations"].values():
+            if (operation.get("morph_id") == morph_id
+                    and operation.get("state") in {"LEASE_PREPARED", "ACTIVE_MOBILE",
+                                                   "LEASE_STALE", "REVOCATION_REQUESTED"}):
+                raise TransferError("LEASE_CONFLICT", "Morph already has an open host lease")
+        morph = self.data["morphs"].get(morph_id)
+        if not morph or morph["authority"] != "HAOS":
+            raise TransferError("AUTHORITY_CONFLICT", "HAOS is not active authority")
+        if type(request["expected_generation"]) is not int or request["expected_generation"] != morph["generation"]:
+            raise TransferError("GENERATION_CONFLICT", "expected generation does not match")
+        if not hmac.compare_digest(str(request["expected_snapshot_digest"]), morph["snapshot_digest"]):
+            raise TransferError("SNAPSHOT_CONFLICT", "expected snapshot digest does not match")
+        validate_snapshot(morph["snapshot"])
+        predecessor_digest = morph["snapshot_digest"]
+        if morph["snapshot"]["schema"] == MORPH_CORE_LIFE_SCHEMA:
+            set_core_authority(morph["snapshot"]["payload"]["morph_core"], "FROZEN")
+            refresh_snapshot(morph)
+        morph["authority"], morph["engine_state"] = "FROZEN_FOR_LEASE", "FROZEN"
+        payload = morph["snapshot"].get("payload", {})
+        core = payload.get("morph_core") if isinstance(payload.get("morph_core"), dict) else {}
+        identity = core_identity(core) if core else {}
+        ui = core.get("ui") if isinstance(core.get("ui"), dict) else {}
+        render_profile = {
+            "schema": "serein.morph-render-profile.v1",
+            "morph_id": morph_id,
+            "founder_id": morph["founder_id"],
+            "primitive_element": identity.get("primitive_element", "UNKNOWN"),
+            "expression": ui.get("expression", "UNKNOWN"),
+            "presentation": deepcopy(payload.get("presentation", {})),
+        }
+        render_profile["render_digest"] = sha256_json(render_profile)
+        op = {
+            "schema": HOST_LEASE_SCHEMA,
+            "operation_kind": "HOST_LEASE",
+            "lease_id": lease_id,
+            "morph_id": morph_id,
+            "founder_id": morph["founder_id"],
+            "device_birth_lineage": morph["device_birth_lineage"],
+            "source_frame": "HAOS",
+            "target_frame": target_frame,
+            "generation": morph["generation"],
+            "predecessor_generation": max(0, morph["generation"] - 1),
+            "issued_at": issued.isoformat().replace("+00:00", "Z"),
+            "expires_at": expires.isoformat().replace("+00:00", "Z"),
+            "revocation_state": "CLEAR",
+            "state": "LEASE_PREPARED",
+            "authority": "HAOS_FROZEN",
+            "genome": morph["genome"],
+            "genome_sha256": morph["genome_sha256"],
+            "snapshot": deepcopy(morph["snapshot"]),
+            "snapshot_digest": morph["snapshot_digest"],
+            "predecessor_snapshot_digest": predecessor_digest,
+            "render_profile": render_profile,
+            "transport_receipt": deepcopy(receipt),
+            "transport_receipt_digest": sha256_json(receipt),
+            "request_fingerprint": fingerprint,
+            "prepared_at": current_time.isoformat().replace("+00:00", "Z"),
+        }
+        self.data["operations"][lease_id] = op
+        return self.status(lease_id, include_snapshot=True)
+
+    def commit_host_lease(self, lease_id: str, snapshot_digest: str,
+                          render_digest: str, destination_receipt: dict[str, Any],
+                          now: datetime) -> dict[str, Any]:
+        op = self._op(lease_id)
+        if op.get("operation_kind") != "HOST_LEASE":
+            raise TransferError("INVALID_STATE", "operation is not a host lease")
+        if not hmac.compare_digest(op["snapshot_digest"], snapshot_digest):
+            raise TransferError("DIGEST_MISMATCH", "lease snapshot digest differs")
+        if not hmac.compare_digest(op["render_profile"]["render_digest"], render_digest):
+            raise TransferError("RENDER_DIGEST_MISMATCH", "lease render digest differs")
+        if not isinstance(destination_receipt, dict):
+            raise TransferError("DESTINATION_NOT_DURABLE", "destination staging receipt is required")
+        _exact(destination_receipt, {"schema", "receipt_id", "lease_id", "target_frame",
+                                     "snapshot_digest", "render_digest", "staged_at",
+                                     "evidence_digest"}, "destination staging receipt")
+        if (destination_receipt["schema"] != HOST_STAGE_RECEIPT_SCHEMA
+                or destination_receipt["lease_id"] != lease_id
+                or destination_receipt["target_frame"] != op["target_frame"]
+                or destination_receipt["snapshot_digest"] != snapshot_digest
+                or destination_receipt["render_digest"] != render_digest):
+            raise TransferError("DESTINATION_NOT_DURABLE", "destination staging receipt does not bind the lease")
+        _parse_time(destination_receipt["staged_at"])
+        evidence_digest = str(destination_receipt["evidence_digest"])
+        if len(evidence_digest) != 64 or any(ch not in "0123456789abcdef" for ch in evidence_digest):
+            raise TransferError("DESTINATION_NOT_DURABLE", "destination evidence digest must be lowercase SHA-256")
+        if op["state"] == "ACTIVE_MOBILE":
+            return self.status(lease_id, include_snapshot=True)
+        if op["state"] != "LEASE_PREPARED":
+            raise TransferError("INVALID_STATE", "host lease cannot be activated")
+        if _parse_time(op["expires_at"]) <= now.astimezone(UTC):
+            raise TransferError("EXPIRED", "host lease expired before activation")
+        morph = self.data["morphs"].get(op["morph_id"])
+        if (not morph or morph["authority"] != "FROZEN_FOR_LEASE"
+                or morph["generation"] != op["generation"]
+                or morph["snapshot_digest"] != op["snapshot_digest"]):
+            raise TransferError("LEASE_CHECKPOINT_CONFLICT", "HAOS lease checkpoint changed")
+        morph["authority"], morph["engine_state"] = op["target_frame"], "REMOTE_ACTIVE"
+        op["state"], op["authority"] = "ACTIVE_MOBILE", op["target_frame"]
+        op["destination_state"] = "DURABLE_INACTIVE"
+        op["render_state"] = "PENDING"
+        op["destination_receipt"] = deepcopy(destination_receipt)
+        op["destination_receipt_digest"] = sha256_json(destination_receipt)
+        op["activated_at"] = now.astimezone(UTC).isoformat().replace("+00:00", "Z")
+        return self.status(lease_id, include_snapshot=True)
+
+    def record_host_render(self, receipt: dict[str, Any], now: datetime) -> dict[str, Any]:
+        _exact(receipt, {"schema", "receipt_id", "lease_id", "target_frame", "snapshot_digest",
+                         "render_digest", "rendered_at", "evidence_digest"}, "host render receipt")
+        if receipt["schema"] != HOST_RENDER_RECEIPT_SCHEMA:
+            raise TransferError("INVALID_RECEIPT", "host render receipt schema is not admitted")
+        lease_id = str(receipt["lease_id"])
+        op = self._op(lease_id)
+        if (op.get("operation_kind") != "HOST_LEASE"
+                or op.get("state") not in {"ACTIVE_MOBILE", "LEASE_STALE", "REVOCATION_REQUESTED"}):
+            raise TransferError("INVALID_STATE", "host lease is not renderable")
+        if (receipt["target_frame"] != op["target_frame"]
+                or receipt["snapshot_digest"] != op["snapshot_digest"]
+                or receipt["render_digest"] != op["render_profile"]["render_digest"]):
+            raise TransferError("RENDER_RECEIPT_CONFLICT", "render receipt does not bind the active lease")
+        _parse_time(receipt["rendered_at"])
+        evidence_digest = str(receipt["evidence_digest"])
+        if len(evidence_digest) != 64 or any(ch not in "0123456789abcdef" for ch in evidence_digest):
+            raise TransferError("INVALID_RECEIPT", "render evidence digest must be lowercase SHA-256")
+        receipt_digest = sha256_json(receipt)
+        if op.get("render_receipt_digest") and op["render_receipt_digest"] != receipt_digest:
+            raise TransferError("REPLAY_CONFLICT", "render receipt changed")
+        op["render_state"] = "VERIFIED"
+        op["render_receipt"] = deepcopy(receipt)
+        op["render_receipt_digest"] = receipt_digest
+        op["render_verified_at"] = now.astimezone(UTC).isoformat().replace("+00:00", "Z")
+        return self.status(lease_id, include_snapshot=True)
+
+    def revoke_host_lease(self, lease_id: str, now: datetime) -> dict[str, Any]:
+        """Request safe return; never manufacture HAOS authority over a mobile host."""
+        op = self._op(lease_id)
+        if op.get("operation_kind") != "HOST_LEASE":
+            raise TransferError("INVALID_STATE", "operation is not a host lease")
+        morph = self.data["morphs"].get(op["morph_id"])
+        observed = now.astimezone(UTC).isoformat().replace("+00:00", "Z")
+        if op["state"] == "LEASE_PREPARED":
+            if (morph and morph["authority"] == "FROZEN_FOR_LEASE"
+                    and morph["generation"] == op["generation"]):
+                morph["authority"], morph["engine_state"] = "HAOS", "ACTIVE_DEFERRED_TICK"
+                if morph["snapshot"]["schema"] == MORPH_CORE_LIFE_SCHEMA:
+                    set_core_authority(morph["snapshot"]["payload"]["morph_core"], "HAOS_ACTIVE")
+                    refresh_snapshot(morph)
+            op["state"], op["authority"] = "LEASE_CANCELLED", "HAOS"
+            op["revocation_state"], op["revoked_at"] = "COMPLETE", observed
+        elif op["state"] in {"ACTIVE_MOBILE", "LEASE_STALE", "REVOCATION_REQUESTED"}:
+            op["state"] = "REVOCATION_REQUESTED"
+            op["revocation_state"], op["revoked_at"] = "REQUESTED", observed
+        elif op["state"] not in {"LEASE_CANCELLED", "LEASE_CLOSED"}:
+            raise TransferError("INVALID_STATE", "host lease cannot be revoked")
+        return self.status(lease_id, include_snapshot=True)
+
+    def prepare_host_return(self, request: dict[str, Any], now: datetime) -> dict[str, Any]:
+        """Stage a leased Morph successor without rewriting immutable birth lineage."""
+        fields = {"schema", "lease_id", "transfer_id", "morph_id", "source_frame",
+                  "generation", "predecessor_generation", "created_at", "expires_at", "snapshot"}
+        _exact(request, fields, "host return request")
+        if request["schema"] != HOST_RETURN_SCHEMA:
+            raise TransferError("INVALID_SCHEMA", "host return schema is not admitted")
+        lease = self._op(str(request["lease_id"]))
+        if (lease.get("operation_kind") != "HOST_LEASE"
+                or lease.get("state") not in {"ACTIVE_MOBILE", "LEASE_STALE", "REVOCATION_REQUESTED"}):
+            raise TransferError("INVALID_STATE", "host lease is not returnable")
+        transfer_id = str(request["transfer_id"])
+        fingerprint = sha256_json(request)
+        existing = self.data["operations"].get(transfer_id)
+        if existing:
+            if existing.get("request_fingerprint") != fingerprint:
+                raise TransferError("REPLAY_CONFLICT", "host return id payload changed")
+            return self.status(transfer_id, include_snapshot=True)
+        morph = self.data["morphs"].get(str(request["morph_id"]))
+        if not morph or morph["authority"] != request["source_frame"]:
+            raise TransferError("AUTHORITY_CONFLICT", "mobile Frame is not active authority")
+        if (request["morph_id"] != lease["morph_id"]
+                or request["source_frame"] != lease["target_frame"]):
+            raise TransferError("LEASE_CONFLICT", "host return does not match the active lease")
+        if (type(request["generation"]) is not int or type(request["predecessor_generation"]) is not int
+                or request["predecessor_generation"] != morph["generation"]
+                or request["generation"] != morph["generation"] + 1):
+            raise TransferError("GENERATION_CONFLICT", "host return must be the immediate successor")
+        created, expires = _parse_time(request["created_at"]), _parse_time(request["expires_at"])
+        if expires <= now.astimezone(UTC) or expires <= created:
+            raise TransferError("EXPIRED", "host return offer expired")
+        digest = validate_snapshot(request["snapshot"])
+        if request["snapshot"]["schema"] == MORPH_CORE_LIFE_SCHEMA:
+            identity = core_identity(request["snapshot"]["payload"]["morph_core"])
+            current_identity = core_identity(morph["snapshot"]["payload"]["morph_core"])
+            for field in ("morph_id", "founder_lineage", "device_birth_lineage", "genome_version"):
+                if identity.get(field) != current_identity.get(field):
+                    raise TransferError("IDENTITY_CONFLICT", f"immutable {field} changed")
+        op = deepcopy(request)
+        op.update({"operation_kind": "HOST_RETURN", "state": "HOST_RETURN_PREPARED",
+                   "authority": request["source_frame"], "snapshot_digest": digest,
+                   "founder_id": morph["founder_id"], "device_birth_lineage": morph["device_birth_lineage"],
+                   "genome_sha256": morph["genome_sha256"], "request_fingerprint": fingerprint,
+                   "prepared_at": now.astimezone(UTC).isoformat().replace("+00:00", "Z")})
+        self.data["operations"][transfer_id] = op
+        return self.status(transfer_id, include_snapshot=True)
+
+    def commit_host_return(self, transfer_id: str, snapshot_digest: str, now: datetime) -> dict[str, Any]:
+        op = self._op(transfer_id)
+        if op.get("operation_kind") != "HOST_RETURN" or op.get("state") != "HOST_RETURN_PREPARED":
+            raise TransferError("INVALID_STATE", "host return is not prepared")
+        if not hmac.compare_digest(op["snapshot_digest"], snapshot_digest):
+            raise TransferError("DIGEST_MISMATCH", "host return snapshot digest differs")
+        if _parse_time(op["expires_at"]) <= now.astimezone(UTC):
+            raise TransferError("EXPIRED", "host return offer expired")
+        lease = self._op(str(op["lease_id"]))
+        morph = self.data["morphs"].get(op["morph_id"])
+        if (lease.get("state") not in {"ACTIVE_MOBILE", "LEASE_STALE", "REVOCATION_REQUESTED"}
+                or not morph or morph["authority"] != op["source_frame"]
+                or morph["generation"] != op["predecessor_generation"]):
+            raise TransferError("HOST_RETURN_CONFLICT", "lease or Morph changed before return commit")
+        morph["generation"] = op["generation"]
+        morph["snapshot"] = deepcopy(op["snapshot"])
+        morph["snapshot_digest"] = op["snapshot_digest"]
+        morph["authority"], morph["engine_state"] = "HAOS", "ACTIVE_DEFERRED_TICK"
+        if morph["snapshot"]["schema"] == MORPH_CORE_LIFE_SCHEMA:
+            set_core_authority(morph["snapshot"]["payload"]["morph_core"], "HAOS_ACTIVE")
+            refresh_snapshot(morph)
+        completed = now.astimezone(UTC).isoformat().replace("+00:00", "Z")
+        op["state"], op["authority"] = "ACTIVE_HAOS", "HAOS"
+        op["committed_at"] = completed
+        op["snapshot_digest"] = morph["snapshot_digest"]
+        lease["state"], lease["authority"] = "LEASE_CLOSED", "HAOS"
+        lease["revocation_state"], lease["closed_by_transfer_id"] = "COMPLETE", transfer_id
+        lease["closed_at"] = completed
+        return self.status(transfer_id, include_snapshot=True)
+
     def prepare_return(self, request: dict[str, Any], now: datetime) -> dict[str, Any]:
         _exact(request, {"schema", "return_id", "morph_id", "target_frame", "expires_at"}, "return request")
         if request["schema"] != API_SCHEMA:
@@ -746,6 +1038,8 @@ class MorphTransferLedger:
         result = {key: op[key] for key in ("schema", "transfer_id", "morph_id", "snapshot_digest", "generation") if key in op}
         if "return_id" in op:
             result["return_id"] = op["return_id"]
+        if "lease_id" in op:
+            result["lease_id"] = op["lease_id"]
         if "migration_id" in op:
             result["migration_id"] = op["migration_id"]
         if "alignment_id" in op:
@@ -772,6 +1066,13 @@ class MorphTransferLedger:
                           "genome", "genome_sha256"):
                 if field in op:
                     result[field] = op[field]
+            for field in ("source_frame", "target_frame", "predecessor_generation",
+                          "issued_at", "expires_at", "revocation_state", "render_profile",
+                          "transport_receipt", "transport_receipt_digest", "destination_state",
+                          "destination_receipt", "destination_receipt_digest", "render_state",
+                          "render_receipt", "render_receipt_digest"):
+                if field in op:
+                    result[field] = deepcopy(op[field])
         result["receipt_digest"] = sha256_json(result)
         return result
 
@@ -828,6 +1129,23 @@ class MorphTransferLedger:
                         set_core_authority(morph["snapshot"]["payload"]["morph_core"], "HAOS_ACTIVE")
                         refresh_snapshot(morph)
                 op["state"], op["authority"] = "RETURN_EXPIRED", "HAOS"
+                changed = True
+            elif state == "LEASE_PREPARED" and _parse_time(op["expires_at"]) <= now:
+                morph = self.data["morphs"].get(op["morph_id"])
+                if (morph and morph["authority"] == "FROZEN_FOR_LEASE"
+                        and morph["generation"] == op["generation"]
+                        and morph["snapshot_digest"] == op["snapshot_digest"]):
+                    morph["authority"], morph["engine_state"] = "HAOS", "ACTIVE_DEFERRED_TICK"
+                    if morph["snapshot"]["schema"] == MORPH_CORE_LIFE_SCHEMA:
+                        set_core_authority(morph["snapshot"]["payload"]["morph_core"], "HAOS_ACTIVE")
+                        refresh_snapshot(morph)
+                op["state"], op["authority"] = "LEASE_EXPIRED", "HAOS"
+                op["revocation_state"] = "COMPLETE"
+                changed = True
+            elif state == "ACTIVE_MOBILE" and _parse_time(op["expires_at"]) <= now:
+                # The remote host may still be active.  Expiry cannot manufacture
+                # HAOS authority; it becomes a reconciliation-required stale lease.
+                op["state"], op["revocation_state"] = "LEASE_STALE", "REQUESTED"
                 changed = True
         return changed
 
