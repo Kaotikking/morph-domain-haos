@@ -1,6 +1,7 @@
 {
   "domain": "morph_domain",
   "name": "MorphDomain",
+  "after_dependencies": ["serein_gateway"],
   "codeowners": ["@Kaotikking"],
   "config_flow": true,
   "dependencies": ["frontend", "http"],
